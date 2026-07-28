@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Posto": {
+      "title": "Posto",
+      "description": "Entire application state and local records for a gas station, indexed by clean CNPJ",
+      "type": "object",
+      "properties": {
+        "updatedAt": {
+          "type": "number",
+          "description": "Epoch timestamp of the last local or sync update"
+        },
+        "nomePosto": {
+          "type": "string",
+          "description": "Name of the gas station"
+        }
+      }
+    },
+    "User": {
+      "title": "User",
+      "description": "Application user details and roles",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nomeCompleto": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "cargo": {
+          "type": "string",
+          "enum": ["Master", "Gerente", "Supervisor", "Frentista"]
+        },
+        "cnpjPosto": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "nomeCompleto", "email", "cargo", "cnpjPosto"]
+    }
+  },
+  "firestore": {
+    "/postos/{cnpj}": {
+      "schema": "Posto",
+      "description": "Gas station records indexed by clean CNPJ containing offline-first state and configurations"
+    }
+  }
+}

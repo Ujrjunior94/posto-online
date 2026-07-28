@@ -1,0 +1,23 @@
+# Firebase Deploy Ignore File
+# Exclude source code and local files that do not need to be served in the final static hosting deployment.
+
+node_modules/
+.git/
+.firebase/
+.firebaserc
+.firebaseignore
+firebase-debug.log
+firebase-applet-config.json
+src/
+public/
+assets/
+tsconfig.json
+vite.config.ts
+package.json
+package-lock.json
+bun.lock
+server.ts
+backups.json
+.env
+.env.example
+*.md
