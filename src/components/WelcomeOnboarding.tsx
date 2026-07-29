@@ -20,7 +20,9 @@ import {
   AlertTriangle,
   Award,
   BookOpen,
-  DollarSign
+  DollarSign,
+  Search,
+  RefreshCw
 } from "lucide-react";
 
 interface WelcomeOnboardingProps {
@@ -43,6 +45,40 @@ export default function WelcomeOnboarding({
   const [cnpj, setCnpj] = useState(currentUser.cnpjPosto || "12.345.678/0001-99");
   const [password, setPassword] = useState(appState.securePassword || "adm001");
   const [error, setError] = useState("");
+  const [isFetchingCnpj, setIsFetchingCnpj] = useState(false);
+  const [cnpjSuccessMsg, setCnpjSuccessMsg] = useState("");
+
+  const handleCnpjLookup = async () => {
+    setError("");
+    setCnpjSuccessMsg("");
+    const cleanCnpj = cnpj.replace(/\D/g, "");
+    if (cleanCnpj.length !== 14) {
+      setError("O CNPJ para busca deve conter exatamente 14 dígitos.");
+      return;
+    }
+
+    setIsFetchingCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+      if (!res.ok) {
+        throw new Error("CNPJ não encontrado ou instabilidade na base de dados nacional.");
+      }
+      const data = await res.json();
+      const resolvedName = data.nome_fantasia || data.razao_social || "";
+      if (resolvedName) {
+        setStationName(resolvedName);
+        setCnpjSuccessMsg(`✓ Dados carregados: ${resolvedName}`);
+        onAddAuditLog("API_LOOKUP", "CNPJ", `Dados cadastrais do CNPJ ${cnpj} buscados com sucesso via BrasilAPI`, "Regular");
+      } else {
+        setError("CNPJ válido, mas nome da empresa não retornado.");
+      }
+    } catch (err: any) {
+      console.warn("Erro ao buscar CNPJ:", err);
+      setError("Não foi possível autocompletar o CNPJ. Prossiga preenchendo manualmente.");
+    } finally {
+      setIsFetchingCnpj(false);
+    }
+  };
 
   const formatCnpj = (value: string) => {
     // Basic mask CNPJ: XX.XXX.XXX/XXXX-XX
@@ -222,14 +258,35 @@ export default function WelcomeOnboarding({
                 {/* CNPJ */}
                 <div className="space-y-1.5">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wide">CNPJ do Posto</label>
-                  <input
-                    type="text"
-                    value={cnpj}
-                    onChange={handleCnpjChange}
-                    maxLength={18}
-                    placeholder="00.000.000/0000-00"
-                    className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-extrabold text-slate-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={cnpj}
+                      onChange={handleCnpjChange}
+                      maxLength={18}
+                      placeholder="00.000.000/0000-00"
+                      className="flex-1 min-w-0 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-mono font-extrabold text-slate-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCnpjLookup}
+                      disabled={isFetchingCnpj}
+                      className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-200 text-white disabled:text-slate-400 font-extrabold rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-md cursor-pointer shrink-0 border-0"
+                      title="Buscar dados cadastrais da Receita Federal via BrasilAPI"
+                    >
+                      {isFetchingCnpj ? (
+                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Search className="h-3.5 w-3.5" />
+                      )}
+                      <span>{isFetchingCnpj ? "Buscando..." : "Buscar"}</span>
+                    </button>
+                  </div>
+                  {cnpjSuccessMsg && (
+                    <p className="text-[10px] text-emerald-600 font-bold mt-1 animate-in fade-in">
+                      {cnpjSuccessMsg}
+                    </p>
+                  )}
                 </div>
 
                 {/* Master Security Password */}

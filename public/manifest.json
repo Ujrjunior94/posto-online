@@ -1,30 +1,68 @@
 {
-  "name": "Meu Posto - Gestão Inteligente",
-  "short_name": "Meu Posto",
-  "description": "Sistema de gestão, folha de ponto e controle para postos de combustíveis.",
-  "start_url": "/",
+  "id": "/?source=pwa",
+  "name": "Meu Posto Infinity",
+  "short_name": "Posto Infinity",
+  "description": "Plataforma operacional completa e inteligente para postos de combustíveis e lojas de conveniência.",
+  "start_url": "/?source=pwa",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "window-controls-overlay",
+    "minimal-ui"
+  ],
   "background_color": "#020617",
   "theme_color": "#10b981",
   "orientation": "portrait-primary",
+  "categories": [
+    "business",
+    "finance",
+    "productivity"
+  ],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon.svg",
       "sizes": "192x192",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icon.svg",
       "sizes": "512x512",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Cockpit Radar",
+      "short_name": "Cockpit",
+      "description": "Visualizar radar operacional em tempo real",
+      "url": "/?shortcut=cockpit",
+      "icons": [
+        {
+          "src": "/icon.svg",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Registrar Ponto",
+      "short_name": "Ponto",
+      "description": "Registrar folha de ponto da equipe",
+      "url": "/?shortcut=timesheet",
+      "icons": [
+        {
+          "src": "/icon.svg",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

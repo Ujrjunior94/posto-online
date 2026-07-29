@@ -289,6 +289,29 @@ self.addEventListener('sync', (event) => {
   }
 });
 
+// Periodic Background Sync Event for silent background data refresh
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'sync-posto-data') {
+    console.log('[SW] Sincronização periódica em segundo plano iniciada.');
+    event.waitUntil(
+      Promise.all([
+        // Sincronizar dados pendentes salvos localmente
+        syncOfflineForms(),
+        // Pré-carregar / atualizar silenciosamente o App Shell estático
+        caches.open(STATIC_CACHE_NAME).then((cache) => {
+          console.log('[SW] Revalidando silenciosamente os assets estáticos no background.');
+          return cache.addAll(STATIC_ASSETS);
+        }).catch((err) => {
+          console.warn('[SW] Falha ao revalidar assets estáticos no background:', err);
+        })
+      ]).then(() => {
+        console.log('[SW] Sincronização periódica em segundo plano concluída com sucesso!');
+        notifyClients({ type: 'PERIODIC_SYNC_SUCCESS', timestamp: Date.now() });
+      })
+    );
+  }
+});
+
 // Client Message Communication Handler
 self.addEventListener('message', (event) => {
   const data = event.data;

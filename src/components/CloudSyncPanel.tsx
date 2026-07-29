@@ -484,6 +484,69 @@ export default function CloudSyncPanel({
   const [newStationPassword, setNewStationPassword] = useState(appState.securePassword || "adm001");
   const [stationShowPassword, setStationShowPassword] = useState(false);
 
+  const [isFetchingModalCnpj, setIsFetchingModalCnpj] = useState(false);
+  const [modalCnpjError, setModalCnpjError] = useState("");
+
+  const handleModalCnpjLookup = async () => {
+    setModalCnpjError("");
+    const cleanCnpj = newStationCnpj.replace(/\D/g, "");
+    if (cleanCnpj.length !== 14) {
+      setModalCnpjError("O CNPJ deve conter exatamente 14 dígitos.");
+      return;
+    }
+
+    setIsFetchingModalCnpj(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
+      if (!res.ok) {
+        throw new Error("CNPJ não encontrado ou instabilidade de conexão.");
+      }
+      const data = await res.json();
+      const resolvedName = data.nome_fantasia || data.razao_social || "";
+      if (resolvedName) {
+        setNewStationName(resolvedName);
+        onAddAuditLog("API_LOOKUP", "CNPJ", `Dados cadastrais do CNPJ ${newStationCnpj} buscados com sucesso via BrasilAPI`, "Regular");
+      } else {
+        setModalCnpjError("CNPJ válido, mas nome da empresa não retornado.");
+      }
+    } catch (err: any) {
+      console.warn("Erro ao buscar CNPJ:", err);
+      setModalCnpjError("Não foi possível autocompletar. Digite os dados manualmente.");
+    } finally {
+      setIsFetchingModalCnpj(false);
+    }
+  };
+
+  const [customCep, setCustomCep] = useState("");
+  const [isFetchingCep, setIsFetchingCep] = useState(false);
+  const [cepError, setCepError] = useState("");
+
+  const handleCepLookup = async () => {
+    setCepError("");
+    const cleanCep = customCep.replace(/\D/g, "");
+    if (cleanCep.length !== 8) {
+      setCepError("O CEP deve conter exatamente 8 dígitos.");
+      return;
+    }
+
+    setIsFetchingCep(true);
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cleanCep}`);
+      if (!res.ok) {
+        throw new Error("CEP não encontrado.");
+      }
+      const data = await res.json();
+      const formattedAddr = `${data.street || ""}, ${data.neighborhood || ""} - ${data.city || ""} / ${data.state || ""}`;
+      setCustomAddress(formattedAddr);
+      onAddAuditLog("API_LOOKUP", "CEP", `Endereço do CEP ${customCep} buscado via BrasilAPI: ${formattedAddr}`, "Regular");
+    } catch (err: any) {
+      console.warn("Erro ao buscar CEP:", err);
+      setCepError("CEP não encontrado. Digite o endereço manualmente.");
+    } finally {
+      setIsFetchingCep(false);
+    }
+  };
+
   // Credential Form Values
   const [credName, setCredName] = useState("");
   const [credCategory, setCredCategory] = useState("Operacional");
@@ -2166,6 +2229,38 @@ export default function CloudSyncPanel({
                   </div>
 
                   <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">CEP para Autocompletar Endereço</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customCep}
+                        onChange={(e) => setCustomCep(e.target.value)}
+                        placeholder="Ex: 12240-000"
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCepLookup}
+                        disabled={isFetchingCep}
+                        className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 text-white disabled:text-slate-400 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1 cursor-pointer shrink-0 border-0"
+                        title="Buscar endereço via CEP na BrasilAPI"
+                      >
+                        {isFetchingCep ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Search className="h-3.5 w-3.5" />
+                        )}
+                        <span>{isFetchingCep ? "Buscando..." : "Buscar CEP"}</span>
+                      </button>
+                    </div>
+                    {cepError && (
+                      <p className="text-[10px] text-rose-500 font-bold mt-1">
+                        {cepError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
                     <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Endereço da Unidade</label>
                     <textarea
                       rows={2}
@@ -2630,14 +2725,35 @@ export default function CloudSyncPanel({
 
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">CNPJ do Posto</label>
-                <input
-                  type="text"
-                  required
-                  value={newStationCnpj}
-                  onChange={(e) => setNewStationCnpj(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-semibold"
-                  placeholder="Ex: 12.345.678/0001-99"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    value={newStationCnpj}
+                    onChange={(e) => setNewStationCnpj(e.target.value)}
+                    className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-mono font-semibold"
+                    placeholder="Ex: 12.345.678/0001-99"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleModalCnpjLookup}
+                    disabled={isFetchingModalCnpj}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-200 text-white disabled:text-slate-400 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1 cursor-pointer shrink-0 border-0"
+                    title="Buscar dados cadastrais via BrasilAPI"
+                  >
+                    {isFetchingModalCnpj ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Search className="h-3.5 w-3.5" />
+                    )}
+                    <span>{isFetchingModalCnpj ? "Buscando..." : "Buscar"}</span>
+                  </button>
+                </div>
+                {modalCnpjError && (
+                  <p className="text-[10px] text-rose-500 font-bold mt-1">
+                    {modalCnpjError}
+                  </p>
+                )}
               </div>
 
               <div>
