@@ -44,6 +44,7 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
+  const [isTechnicalCalibrationsExpanded, setIsTechnicalCalibrationsExpanded] = useState(false);
 
   // Filter transactions in range
   const filteredTxs = transactions.filter((tx) => {
@@ -96,13 +97,13 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
   const applyMultiPreset = (preset: "all" | "accounting" | "anp" | "dre_financial") => {
     switch (preset) {
       case "all":
-        setSelectedMultiReports(["dre", "financial", "lmc", "anp", "litrage", "deliveries"]);
+        setSelectedMultiReports(["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao"]);
         break;
       case "accounting":
         setSelectedMultiReports(["dre", "financial", "lmc"]);
         break;
       case "anp":
-        setSelectedMultiReports(["lmc", "anp", "litrage", "deliveries"]);
+        setSelectedMultiReports(["lmc", "anp", "litrage", "deliveries", "afericao"]);
         break;
       case "dre_financial":
         setSelectedMultiReports(["dre", "financial"]);
@@ -497,6 +498,173 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
               </div>
             )}
           </div>
+
+          {/* Relatório de Aferições & Conformidade ANP */}
+          {(() => {
+            const nowObj = new Date();
+            const nozzleStatusReports = (appState.nozzles || []).map((n) => {
+              const nozzleCals = (calibrations || []).filter((c) => c.nozzleId === n.id);
+              const tank = (appState.tanks || []).find((t) => t.id === n.tanqueId);
+              
+              if (nozzleCals.length === 0) {
+                return {
+                  nozzle: n,
+                  tank,
+                  status: "Pendente",
+                  lastCal: null,
+                  daysSince: Infinity,
+                  conforme: false,
+                  desvio: 0,
+                };
+              }
+              
+              const sortedCals = [...nozzleCals].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+              const lastCal = sortedCals[0];
+              const daysSince = Math.floor((nowObj.getTime() - new Date(lastCal.data).getTime()) / (1000 * 60 * 60 * 24));
+              
+              return {
+                nozzle: n,
+                tank,
+                status: !lastCal.conforme ? "Reprovado" : daysSince > 30 ? "Vencido" : "Em dia",
+                lastCal,
+                daysSince,
+                conforme: lastCal.conforme && daysSince <= 30,
+                desvio: lastCal.desvioMl,
+              };
+            });
+
+            const compliantNozzlesCount = nozzleStatusReports.filter((r) => r.conforme).length;
+            const totalNozzlesCount = nozzleStatusReports.length || 1;
+            const complianceRate = Math.round((compliantNozzlesCount / totalNozzlesCount) * 100);
+            const pendingOrFailedReportList = nozzleStatusReports.filter((r) => !r.conforme);
+
+            return (
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckSquare className="h-4 w-4 text-rose-500" />
+                      Relatório de Aferições & Conformidade de Vazão (ANP)
+                    </h4>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Laudo de inspeção diária com balde de calibração aferido de 20L</p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold self-start sm:self-center ${complianceRate === 100 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                    Índice de Conformidade: {complianceRate}%
+                  </span>
+                </div>
+
+                {/* Camada 1: Resumo Executivo Simplificado */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-150 text-center">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase font-mono block">Total de Bicos</span>
+                    <span className="text-base font-extrabold text-slate-800">{totalNozzlesCount}</span>
+                  </div>
+                  <div className="bg-emerald-50/50 p-2.5 rounded-lg border border-emerald-150 text-center">
+                    <span className="text-[9px] font-bold text-emerald-600 uppercase font-mono block">Bicos Conformes</span>
+                    <span className="text-base font-extrabold text-emerald-700">{compliantNozzlesCount}</span>
+                  </div>
+                  <div className="bg-amber-50/50 p-2.5 rounded-lg border border-amber-150 text-center">
+                    <span className="text-[9px] font-bold text-amber-600 uppercase font-mono block">Vencidos</span>
+                    <span className="text-base font-extrabold text-amber-700">
+                      {nozzleStatusReports.filter((r) => r.status === "Vencido").length}
+                    </span>
+                  </div>
+                  <div className="bg-rose-50/50 p-2.5 rounded-lg border border-rose-150 text-center">
+                    <span className="text-[9px] font-bold text-rose-600 uppercase font-mono block">Reprovados/Pend.</span>
+                    <span className="text-base font-extrabold text-rose-700">
+                      {nozzleStatusReports.filter((r) => r.status === "Reprovado" || r.status === "Pendente").length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Camada 2: Alertas Operacionais Críticos */}
+                <div className="space-y-2">
+                  <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Alertas e Recomendações de Segurança</h5>
+                  {pendingOrFailedReportList.length === 0 ? (
+                    <div className="p-3 bg-emerald-50 text-emerald-800 rounded-lg text-[10.5px] font-bold flex items-center gap-2 border border-emerald-150">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <span>Todos os bicos estão com a aferição física em dia e com vazão mecânica calibrada dentro dos limites (+-100mL). Nenhuma ação necessária.</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {pendingOrFailedReportList.map((item) => (
+                        <div key={item.nozzle.id} className="p-2.5 bg-white rounded-lg border border-rose-150 flex flex-col md:flex-row justify-between md:items-center gap-2 text-xs">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="font-bold text-slate-800">Bico {item.nozzle.numeroBico} (Bomba {item.nozzle.bombaAssociada})</span>
+                              <span className="text-slate-500 text-[11px] block mt-0.5">
+                                Status: <strong className="text-rose-600 uppercase">{item.status}</strong> • Combustível: {item.tank ? item.tank.combustivel : "Indefinido"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-left md:text-right">
+                            <span className="text-[10px] font-bold block text-slate-400 uppercase font-mono">Recomendação</span>
+                            <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded">
+                              {item.status === "Pendente" ? "Aferir 20L de imediato" : item.status === "Vencido" ? "Renovar teste de rotina" : "Bloquear e calibrar bico"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Camada 3: Detalhamento Técnico Avançado */}
+                <div className="border-t border-slate-200/80 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsTechnicalCalibrationsExpanded(!isTechnicalCalibrationsExpanded)}
+                    className="w-full py-1.5 flex items-center justify-between text-xs text-slate-500 hover:text-slate-800 font-bold transition cursor-pointer"
+                  >
+                    <span>{isTechnicalCalibrationsExpanded ? "Ocultar" : "Visualizar"} Detalhes Técnicos dos Bicos (Tabela)</span>
+                    <span>{isTechnicalCalibrationsExpanded ? "▲" : "▼"}</span>
+                  </button>
+
+                  {isTechnicalCalibrationsExpanded && (
+                    <div className="overflow-x-auto mt-2 rounded-xl border border-slate-200 bg-white animate-in slide-in-from-top-2 duration-200">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-500 border-b border-slate-200">
+                            <th className="py-2 px-3">Bico</th>
+                            <th className="py-2 px-3">Bomba</th>
+                            <th className="py-2 px-3">Combustível</th>
+                            <th className="py-2 px-3">Último Teste</th>
+                            <th className="py-2 px-3">Desvio (mL)</th>
+                            <th className="py-2 px-3">Intervalo</th>
+                            <th className="py-2 px-3">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {nozzleStatusReports.map((item) => (
+                            <tr key={item.nozzle.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                              <td className="py-2 px-3 font-bold text-slate-800">Bico {item.nozzle.numeroBico}</td>
+                              <td className="py-2 px-3 text-slate-600 font-mono">Bomba {item.nozzle.bombaAssociada}</td>
+                              <td className="py-2 px-3 text-slate-500">{item.tank ? item.tank.combustivel : "Não configurado"}</td>
+                              <td className="py-2 px-3 text-slate-500 font-mono">
+                                {item.lastCal ? item.lastCal.data.split("-").reverse().join("/") : "Sem registro"}
+                              </td>
+                              <td className="py-2 px-3 font-mono font-bold text-slate-700">
+                                {item.lastCal ? `${item.desvio > 0 ? "+" : ""}${item.desvio} mL` : "—"}
+                              </td>
+                              <td className="py-2 px-3 text-slate-500 font-mono">
+                                {item.daysSince === Infinity ? "—" : `${item.daysSince} dias`}
+                              </td>
+                              <td className="py-2 px-3">
+                                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${item.conforme ? "bg-emerald-50 text-emerald-700 border border-emerald-150" : "bg-rose-50 text-rose-700 border border-rose-150"}`}>
+                                  {item.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* PDF & CSV Export Compiler Actions */}
@@ -557,7 +725,7 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
                 onClick={() => applyMultiPreset("all")}
                 className="text-[10.5px] font-bold px-2.5 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 border border-indigo-200 rounded-md transition shadow-2xs cursor-pointer"
               >
-                ✨ Pacote Completo (Todos os 6)
+                ✨ Pacote Completo (Todos os 7)
               </button>
             </div>
 
@@ -567,7 +735,8 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
                 { id: "dre" as ReportType, title: "DRE Mensal & Demonstrativo de Resultados", desc: "Apuração de faturamento, lucros e margem", icon: Calculator, color: "indigo" },
                 { id: "financial" as ReportType, title: "Relatório Financeiro & Fluxo de Caixa", desc: "Receitas, despesas por categoria e saldos", icon: DollarSign, color: "emerald" },
                 { id: "lmc" as ReportType, title: "Livro LMC (Movimentação de Combustíveis)", desc: "Abertura, fechamento e vendas por bomba", icon: FileText, color: "amber" },
-                { id: "anp" as ReportType, title: "Laudo Qualidade ANP & Aferições", desc: "Densidade D20, calibração e conformidade", icon: ShieldCheck, color: "purple" },
+                { id: "anp" as ReportType, title: "Laudo Qualidade ANP (Densidade & Proveta)", desc: "Análises de pureza de combustíveis e D20", icon: ShieldCheck, color: "purple" },
+                { id: "afericao" as ReportType, title: "Aferição de Bicos (Volume & Vazão)", desc: "Relatório de ensaio com balde de 20L Inmetro", icon: CheckSquare, color: "rose" },
                 { id: "litrage" as ReportType, title: "Litragem & Medição de Tanques", desc: "Volumes físicos e alertas de nível crítico", icon: Droplet, color: "blue" },
                 { id: "deliveries" as ReportType, title: "Combustíveis Descarregados (Entregas NF-e)", desc: "Entregas efetuadas, dados de notas e transportadoras", icon: Truck, color: "teal" },
               ].map((item) => {
@@ -649,6 +818,7 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
                 { id: "financial" as ReportType, title: "Financeiro", icon: DollarSign },
                 { id: "lmc" as ReportType, title: "Livro LMC", icon: FileText },
                 { id: "anp" as ReportType, title: "Laudo ANP", icon: ShieldCheck },
+                { id: "afericao" as ReportType, title: "Aferição Bicos", icon: CheckSquare },
                 { id: "litrage" as ReportType, title: "Litragem Tanques", icon: Droplet },
                 { id: "deliveries" as ReportType, title: "Entregas NF-e", icon: Truck },
               ].map((item) => {

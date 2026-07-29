@@ -1337,6 +1337,7 @@ export default function App() {
               appState={appState}
               userRole={currentUser.cargo}
               onUpdateNozzles={handleUpdateNozzles}
+              onUpdateCalibrations={handleUpdateCalibrations}
               onAddAuditLog={handleAddAuditLog}
               onClearData={() => handleOpenGlobalClear("bicos")}
             />

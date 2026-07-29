@@ -7,7 +7,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AppState, FuelTank, CashTransaction, LmcRecord, NozzleCalibration, ANPQualityAudit, ShiftSchedule } from "../types";
 
-export type ReportType = "financial" | "lmc" | "anp" | "litrage" | "consolidated" | "deliveries" | "dre";
+export type ReportType = "financial" | "lmc" | "anp" | "litrage" | "consolidated" | "deliveries" | "dre" | "afericao";
 
 export interface ExportReportOptions {
   appState: AppState;
@@ -33,6 +33,97 @@ function formatDateBR(dateStr?: string): string {
   return dateStr;
 }
 
+// Helper to compute metrics for any arbitrary date range
+export function computeLitersMetrics(appState: AppState, startDate: string, endDate: string) {
+  const filteredLmc = (appState.lmc || []).filter((r) => {
+    const d = (r.date || "").substring(0, 10);
+    return d >= startDate && d <= endDate;
+  });
+
+  const fuels = (appState.tanks || []).map((t) => t.combustivel);
+  const uniqueFuels = Array.from(new Set(fuels));
+  const activeFuels = uniqueFuels.length > 0 ? uniqueFuels : ["Gasolina Comum", "Gasolina Aditivada", "Etanol", "Diesel S10"];
+
+  let totalLitersSold = 0;
+  let totalLitersDelivered = 0;
+  let totalGainLoss = 0;
+  let totalFaturamento = 0;
+  let totalCusto = 0;
+  let totalMargem = 0;
+
+  const byFuel = activeFuels.map((fuel) => {
+    const lmcForFuel = filteredLmc.filter((r) => r.fuelType === fuel);
+    const litersSold = lmcForFuel.reduce((sum, r) => sum + (Number(r.litersSold) || 0), 0);
+    const litersDelivered = lmcForFuel.reduce((sum, r) => sum + (Number(r.deliveryVolume) || 0), 0);
+    const gainLoss = lmcForFuel.reduce((sum, r) => sum + (Number(r.gainLossLiters) || 0), 0);
+
+    const nozzlesForFuel = (appState.nozzles || []).filter((n) => {
+      const tank = (appState.tanks || []).find((t) => t.id === n.tanqueId);
+      return tank && tank.combustivel === fuel;
+    });
+
+    const precoVenda = nozzlesForFuel.length > 0 ? nozzlesForFuel[0].precoPorLitro : (() => {
+      switch (fuel) {
+        case "Gasolina Comum": return 5.89;
+        case "Gasolina Aditivada": return 6.09;
+        case "Gasolina Premium": return 6.89;
+        case "Etanol": return 3.89;
+        case "Diesel S10": return 5.99;
+        case "Diesel S500": return 5.79;
+        default: return 5.50;
+      }
+    })();
+
+    const marginPerLiter = (() => {
+      switch (fuel) {
+        case "Gasolina Comum": return 0.60;
+        case "Gasolina Aditivada": return 0.70;
+        case "Gasolina Premium": return 1.10;
+        case "Etanol": return 0.45;
+        case "Diesel S10": return 0.50;
+        case "Diesel S500": return 0.45;
+        default: return 0.50;
+      }
+    })();
+
+    const precoCusto = Math.max(0.1, precoVenda - marginPerLiter);
+    const faturamento = litersSold * precoVenda;
+    const custo = litersSold * precoCusto;
+    const margem = faturamento - custo;
+
+    totalLitersSold += litersSold;
+    totalLitersDelivered += litersDelivered;
+    totalGainLoss += gainLoss;
+    totalFaturamento += faturamento;
+    totalCusto += custo;
+    totalMargem += margem;
+
+    return {
+      fuel,
+      litersSold,
+      litersDelivered,
+      gainLoss,
+      precoVenda,
+      precoCusto,
+      faturamento,
+      custo,
+      margem,
+      marginPerLiter
+    };
+  });
+
+  return {
+    byFuel,
+    totalLitersSold,
+    totalLitersDelivered,
+    totalGainLoss,
+    totalFaturamento,
+    totalCusto,
+    totalMargem,
+    averageMarginPerLiter: totalLitersSold > 0 ? totalMargem / totalLitersSold : 0
+  };
+}
+
 /**
  * Generates and downloads a clean, beautifully formatted CSV file for Excel/Sheets.
  * Includes UTF-8 BOM, clear section headers, aligned columns, totals, and electronic signature block.
@@ -41,7 +132,7 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
   try {
     const activeTypes: ReportType[] = (selectedTypes && selectedTypes.length > 0)
       ? selectedTypes
-      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries"] : [reportType]);
+      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao"] : [reportType]);
 
     const periodText = `${formatDateBR(startDate)} a ${formatDateBR(endDate)}`;
     const emissionDate = new Date().toLocaleString("pt-BR");
@@ -248,6 +339,35 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
       }
     }
 
+    if (activeTypes.includes("afericao")) {
+      // Dedicated Aferição de Bicos e Calibração Section
+      csvContent += `--- RELATÓRIO DE AFERIÇÃO DE BICOS E CALIBRAÇÃO DE VAZÃO ---\n`;
+      csvContent += `DATA;BICO / DISPENSER;COMBUSTÍVEL;VOLUME AFERIDO (L);DESVIO (mL);LIMITE TOLERADO;STATUS DE CONFORME;OPERADOR RESPONSÁVEL;VALOR (R$)\n`;
+
+      const filteredCalib = calibrations.filter((item) => {
+        const itemDate = item.data ? item.data.substring(0, 10) : "";
+        return itemDate >= startDate && itemDate <= endDate;
+      });
+
+      if (filteredCalib.length > 0) {
+        filteredCalib.forEach((c) => {
+          const dt = formatDateBR(c.data);
+          const nozzleObj = (appState.nozzles || []).find((n) => n.id === c.nozzleId);
+          const bico = nozzleObj ? `Bico ${nozzleObj.numeroBico}` : c.nozzleId || "Bico 01";
+          const tankObj = nozzleObj ? (tanks || []).find((t) => t.id === nozzleObj.tanqueId) : null;
+          const fuel = tankObj ? tankObj.combustivel : "Gasolina Comum";
+          const vol = Number(c.volumeMedido) || 20;
+          const desvio = Number(c.desvioMl) || 0;
+          const status = c.conforme ? "CONFORME" : "NÃO CONFORME";
+          const val = c.valorReais ? formatBRL(c.valorReais) : "R$ 0,00";
+          csvContent += `${dt};${bico};${fuel};${vol.toLocaleString("pt-BR")} L;${desvio > 0 ? "+" : ""}${desvio} mL;±100 mL;${status};${c.operadorResponsavel || "Não Informado"};${val}\n`;
+        });
+        csvContent += `\n`;
+      } else {
+        csvContent += `-;Nenhuma aferição de calibração registrada no período;-;-;-;±100 mL;-;-;R$ 0,00\n\n`;
+      }
+    }
+
     if (activeTypes.includes("litrage")) {
       // Tanks Stock & Status
       csvContent += `--- SITUAÇÃO DO ESTOQUE E CAPACIDADE DOS TANQUES ---\n`;
@@ -324,58 +444,34 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
 
     if (activeTypes.includes("dre")) {
       // DRE Section
-      csvContent += `--- DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO (DRE MENSAL) ---\n`;
-      csvContent += `ESTRUTURA DRE;VALOR (R$);% DA RECEITA BRUTA;DESCRICÃO\n`;
+      csvContent += `--- DEMONSTRATIVO DE RESULTADO DE LITRAGEM (DRE DE LITRAGEM) ---\n`;
+      csvContent += `ESTRUTURA DRE;LITRAGEM (L);VALOR ESTIMADO (R$);% PARTICIPAÇÃO;DESCRIÇÃO\n`;
 
-      const filteredBalances = (appState.dailyBalances || []).filter((b) => {
-        const dDate = (b.data || "").substring(0, 10);
-        return dDate >= startDate && dDate <= endDate;
+      const m = computeLitersMetrics(appState, startDate, endDate);
+
+      csvContent += `(+) 1. VOLUME OPERACIONAL DE VENDAS E FATURAMENTO BRUTO;${m.totalLitersSold.toLocaleString("pt-BR")} L;${formatBRL(m.totalFaturamento)};100,0%;Faturamento bruto consolidado\n`;
+      m.byFuel.forEach((f) => {
+        const pct = m.totalLitersSold > 0 ? (f.litersSold / m.totalLitersSold) * 100 : 0;
+        csvContent += `   1.1. Venda - ${f.fuel};${f.litersSold.toLocaleString("pt-BR")} L;${formatBRL(f.faturamento)};${pct.toFixed(1).replace(".", ",")}%;Faturamento estimado de ${f.fuel}\n`;
       });
 
-      let totalCombustivel = 0;
-      let totalLubrificantes = 0;
-      let totalOutras = 0;
-      let totalDespesas = 0;
-      let totalDinheiro = 0;
-      let totalCartaoCredito = 0;
-      let totalCartaoDebito = 0;
-      let totalPix = 0;
-      let totalPrazo = 0;
-
-      filteredBalances.forEach((b) => {
-        totalCombustivel += Number(b.vendaCombustivel) || 0;
-        totalLubrificantes += Number(b.vendaLubrificantes) || 0;
-        totalOutras += Number(b.outrasReceitas) || 0;
-        totalDespesas += Number(b.totalDespesas) || 0;
-        totalDinheiro += Number(b.metodosPagamento?.dinheiro) || 0;
-        totalCartaoCredito += Number(b.metodosPagamento?.cartaoCredito) || 0;
-        totalCartaoDebito += Number(b.metodosPagamento?.cartaoDebito) || 0;
-        totalPix += Number(b.metodosPagamento?.pix) || 0;
-        totalPrazo += Number(b.metodosPagamento?.prazo) || 0;
+      csvContent += `(-) 2. CUSTO DE AQUISIÇÃO DAS MERCADORIAS VENDIDAS (CMV);${m.totalLitersSold.toLocaleString("pt-BR")} L;${formatBRL(m.totalCusto)};${m.totalFaturamento > 0 ? ((m.totalCusto / m.totalFaturamento) * 100).toFixed(1).replace(".", ",") : "0,0"}%;Custo operacional total de aquisição\n`;
+      m.byFuel.forEach((f) => {
+        const pct = m.totalFaturamento > 0 ? (f.custo / m.totalFaturamento) * 100 : 0;
+        csvContent += `   2.1. Custo CMV - ${f.fuel};${f.litersSold.toLocaleString("pt-BR")} L;${formatBRL(f.custo)};${pct.toFixed(1).replace(".", ",")}%;Custo de CMV de ${f.fuel}\n`;
       });
 
-      const receitaBrutaTotal = totalCombustivel + totalLubrificantes + totalOutras;
-      const lucroLiquido = receitaBrutaTotal - totalDespesas;
-      const margemLiquida = receitaBrutaTotal > 0 ? (lucroLiquido / receitaBrutaTotal) * 100 : 0;
+      csvContent += `(=) 3. APURAÇÃO DA MARGEM DE CONTRIBUIÇÃO DE LITRAGEM;${m.totalLitersSold.toLocaleString("pt-BR")} L;${formatBRL(m.totalMargem)};${m.totalFaturamento > 0 ? ((m.totalMargem / m.totalFaturamento) * 100).toFixed(1).replace(".", ",") : "0,0"}%;Margem operacional consolidada\n`;
+      m.byFuel.forEach((f) => {
+        const pct = m.totalMargem > 0 ? (f.margem / m.totalMargem) * 100 : 0;
+        csvContent += `   3.1. Margem - ${f.fuel};${f.litersSold.toLocaleString("pt-BR")} L;${formatBRL(f.margem)};${pct.toFixed(1).replace(".", ",")}%;Margem operacional de ${f.fuel}\n`;
+      });
 
-      const pComb = receitaBrutaTotal > 0 ? (totalCombustivel / receitaBrutaTotal) * 100 : 0;
-      const pLub = receitaBrutaTotal > 0 ? (totalLubrificantes / receitaBrutaTotal) * 100 : 0;
-      const pOut = receitaBrutaTotal > 0 ? (totalOutras / receitaBrutaTotal) * 100 : 0;
-      const pDesp = receitaBrutaTotal > 0 ? (totalDespesas / receitaBrutaTotal) * 100 : 0;
-
-      csvContent += `(+) 1. RECEITA OPERACIONAL BRUTA;${formatBRL(receitaBrutaTotal)};100,0%;Faturamento bruto consolidado\n`;
-      csvContent += `   1.1 Venda de Combustíveis;${formatBRL(totalCombustivel)};${pComb.toFixed(1)}%;Venda de gasolina, etanol e diesel\n`;
-      csvContent += `   1.2 Venda de Lubrificantes;${formatBRL(totalLubrificantes)};${pLub.toFixed(1)}%;Troca de óleo, aditivos e fluidos\n`;
-      csvContent += `   1.3 Outras Receitas Operacionais;${formatBRL(totalOutras)};${pOut.toFixed(1)}%;Conveniência, lavagem, serviços\n`;
-      csvContent += `(-) 2. DESPESAS E CUSTOS OPERACIONAIS;${formatBRL(totalDespesas)};${pDesp.toFixed(1)}%;Despesas da operação do posto\n`;
-      csvContent += `(=) 3. RESULTADO LÍQUIDO OPERACIONAL;${formatBRL(lucroLiquido)};${margemLiquida.toFixed(1)}%;${lucroLiquido >= 0 ? "LUCRO LÍQUIDO DO PERÍODO" : "PREJUÍZO DO PERÍODO"}\n\n`;
-
-      csvContent += `FORMA DE PAGAMENTO;VALOR CAPTURADO (R$);% DO TOTAL;MODALIDADE\n`;
-      csvContent += `Dinheiro;${formatBRL(totalDinheiro)};${(receitaBrutaTotal > 0 ? (totalDinheiro/receitaBrutaTotal)*100 : 0).toFixed(1)}%;Espécie no caixa\n`;
-      csvContent += `Cartão de Crédito;${formatBRL(totalCartaoCredito)};${(receitaBrutaTotal > 0 ? (totalCartaoCredito/receitaBrutaTotal)*100 : 0).toFixed(1)}%;POS / TEF Crédito\n`;
-      csvContent += `Cartão de Débito;${formatBRL(totalCartaoDebito)};${(receitaBrutaTotal > 0 ? (totalCartaoDebito/receitaBrutaTotal)*100 : 0).toFixed(1)}%;POS / TEF Débito\n`;
-      csvContent += `PIX / Transferência;${formatBRL(totalPix)};${(receitaBrutaTotal > 0 ? (totalPix/receitaBrutaTotal)*100 : 0).toFixed(1)}%;Pagamento Instantâneo\n`;
-      csvContent += `Vendas a Prazo / Faturado;${formatBRL(totalPrazo)};${(receitaBrutaTotal > 0 ? (totalPrazo/receitaBrutaTotal)*100 : 0).toFixed(1)}%;Contas a receber / Clientes Faturados\n\n`;
+      csvContent += `\nINDICADORES DE DESEMPENHO DE LITRAGEM\n`;
+      csvContent += `Volume Total Vendido;${m.totalLitersSold.toLocaleString("pt-BR")} L;-\n`;
+      csvContent += `Volume Total Recebido;${m.totalLitersDelivered.toLocaleString("pt-BR")} L;-\n`;
+      csvContent += `Diferença Física LMC (Sobra/Perda);${m.totalGainLoss > 0 ? "+" : ""}${m.totalGainLoss.toLocaleString("pt-BR")} L;-\n`;
+      csvContent += `Margem Média por Litro;${formatBRL(m.averageMarginPerLiter)} / L;-\n\n`;
     }
 
     // Signature Block
@@ -415,7 +511,7 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
   try {
     const activeTypes: ReportType[] = (selectedTypes && selectedTypes.length > 0)
       ? selectedTypes
-      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries"] : [reportType]);
+      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao"] : [reportType]);
 
     const doc = new jsPDF("p", "mm", "a4");
     const periodText = `${formatDateBR(startDate)} a ${formatDateBR(endDate)}`;
@@ -834,6 +930,71 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
       currentY = (doc as any).lastAutoTable.finalY + 8;
     }
 
+    if (activeTypes.includes("afericao")) {
+      if (currentY > 210) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text("REGISTRO DE AFERIÇÃO DE BICOS E CALIBRAÇÃO (BALDE DE 20L)", startX, currentY);
+      currentY += 3;
+
+      const calibRows = calibrations.filter((item) => {
+        const itemDate = item.data ? item.data.substring(0, 10) : "";
+        return itemDate >= startDate && itemDate <= endDate;
+      }).map((c) => {
+        const nozzleObj = (appState.nozzles || []).find((n) => n.id === c.nozzleId);
+        const bico = nozzleObj ? `Bico ${nozzleObj.numeroBico}` : c.nozzleId || "Bico 01";
+        const tankObj = nozzleObj ? (tanks || []).find((t) => t.id === nozzleObj.tanqueId) : null;
+        const fuel = tankObj ? tankObj.combustivel : "Gasolina Comum";
+        return [
+          formatDateBR(c.data),
+          bico,
+          fuel,
+          `${Number(c.volumeMedido || 20).toLocaleString("pt-BR")} L`,
+          `${Number(c.desvioMl || 0) > 0 ? "+" : ""}${Number(c.desvioMl || 0)} mL`,
+          `R$ ${(c.valorReais || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          c.conforme ? "CONFORME" : "NÃO CONFORME",
+          c.operadorResponsavel || "Não Informado"
+        ];
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Data", "Bico / Dispenser", "Combustível", "Vol. Ensaio", "Desvio", "Valor (R$)", "Status", "Operador Responsável"]],
+        body: calibRows.length > 0 ? calibRows : [["-", "Sem aferições de bicos no período", "-", "-", "-", "-", "-", "-"]],
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: "bold" },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left", fontStyle: "bold" },
+          2: { halign: "left" },
+          3: { halign: "right" },
+          4: { halign: "center" },
+          5: { halign: "right" },
+          6: { halign: "center", fontStyle: "bold" },
+          7: { halign: "left" },
+        },
+        styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 6) {
+            if (data.cell.text[0] === "CONFORME") {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else if (data.cell.text[0] === "NÃO CONFORME") {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fillColor = [254, 242, 242];
+            }
+          }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
+
     if (activeTypes.includes("litrage")) {
       if (currentY > 210) {
         doc.addPage();
@@ -942,53 +1103,102 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
       doc.setTextColor(15, 23, 42);
-      doc.text("DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO (DRE MENSAL)", startX, currentY);
+      doc.text("DEMONSTRATIVO DE RESULTADO DE LITRAGEM (DRE DE LITRAGEM)", startX, currentY);
       currentY += 3;
 
-      const filteredBalances = (appState.dailyBalances || []).filter((b) => {
-        const dDate = (b.data || "").substring(0, 10);
-        return dDate >= startDate && dDate <= endDate;
+      const m = computeLitersMetrics(appState, startDate, endDate);
+
+      const dreRows: any[] = [];
+      
+      // Section 1
+      dreRows.push([
+        "1. VOLUME DE VENDAS E FATURAMENTO BRUTO",
+        `${m.totalLitersSold.toLocaleString("pt-BR")} L`,
+        formatBRL(m.totalFaturamento),
+        "100.0%",
+        "Consolidado Geral de Pista"
+      ]);
+      m.byFuel.forEach((f) => {
+        const pct = m.totalLitersSold > 0 ? (f.litersSold / m.totalLitersSold) * 100 : 0;
+        dreRows.push([
+          `   • Venda - ${f.fuel}`,
+          `${f.litersSold.toLocaleString("pt-BR")} L`,
+          formatBRL(f.faturamento),
+          `${pct.toFixed(1)}%`,
+          `Preço Médio: R$ ${f.precoVenda.toFixed(2)}/L`
+        ]);
       });
 
-      let totalCombustivel = 0;
-      let totalLubrificantes = 0;
-      let totalOutras = 0;
-      let totalDespesas = 0;
-
-      filteredBalances.forEach((b) => {
-        totalCombustivel += Number(b.vendaCombustivel) || 0;
-        totalLubrificantes += Number(b.vendaLubrificantes) || 0;
-        totalOutras += Number(b.outrasReceitas) || 0;
-        totalDespesas += Number(b.totalDespesas) || 0;
+      // Section 2
+      dreRows.push([
+        "2. CUSTO DE AQUISIÇÃO DAS MERCADORIAS (CMV)",
+        `${m.totalLitersSold.toLocaleString("pt-BR")} L`,
+        `(-) ${formatBRL(m.totalCusto)}`,
+        m.totalFaturamento > 0 ? `${((m.totalCusto / m.totalFaturamento) * 100).toFixed(1)}%` : "0%",
+        "Custo Operacional Total"
+      ]);
+      m.byFuel.forEach((f) => {
+        const pct = m.totalFaturamento > 0 ? (f.custo / m.totalFaturamento) * 100 : 0;
+        dreRows.push([
+          `   • CMV - ${f.fuel}`,
+          `${f.litersSold.toLocaleString("pt-BR")} L`,
+          `(-) ${formatBRL(f.custo)}`,
+          `${pct.toFixed(1)}%`,
+          `Custo Médio: R$ ${f.precoCusto.toFixed(2)}/L`
+        ]);
       });
 
-      const receitaBrutaTotal = totalCombustivel + totalLubrificantes + totalOutras;
-      const lucroLiquido = receitaBrutaTotal - totalDespesas;
-      const margemLiquida = receitaBrutaTotal > 0 ? (lucroLiquido / receitaBrutaTotal) * 100 : 0;
-
-      const dreRows = [
-        ["(+) 1. RECEITA OPERACIONAL BRUTA", formatBRL(receitaBrutaTotal), "100.0%", "Faturamento Bruto Total"],
-        ["   1.1 Vendas de Combustíveis", formatBRL(totalCombustivel), receitaBrutaTotal > 0 ? `${((totalCombustivel/receitaBrutaTotal)*100).toFixed(1)}%` : "0%", "Gasolina, Etanol e Diesel"],
-        ["   1.2 Vendas de Lubrificantes e Produtos", formatBRL(totalLubrificantes), receitaBrutaTotal > 0 ? `${((totalLubrificantes/receitaBrutaTotal)*100).toFixed(1)}%` : "0%", "Troca de Óleo e Fluidos"],
-        ["   1.3 Outras Receitas Operacionais", formatBRL(totalOutras), receitaBrutaTotal > 0 ? `${((totalOutras/receitaBrutaTotal)*100).toFixed(1)}%` : "0%", "Conveniência e Serviços"],
-        ["(-) 2. DESPESAS OPERACIONAIS TOTAIS", formatBRL(totalDespesas), receitaBrutaTotal > 0 ? `${((totalDespesas/receitaBrutaTotal)*100).toFixed(1)}%` : "0%", "Despesas de Funcionamento"],
-        ["(=) 3. RESULTADO LÍQUIDO OPERACIONAL (DRE)", formatBRL(lucroLiquido), `${margemLiquida.toFixed(1)}%`, lucroLiquido >= 0 ? "LUCRO LÍQUIDO DO PERÍODO" : "PREJUÍZO DO PERÍODO"]
-      ];
+      // Section 3
+      dreRows.push([
+        "3. MARGEM DE CONTRIBUIÇÃO DE LITRAGEM",
+        `${m.totalLitersSold.toLocaleString("pt-BR")} L`,
+        `(+) ${formatBRL(m.totalMargem)}`,
+        m.totalFaturamento > 0 ? `${((m.totalMargem / m.totalFaturamento) * 100).toFixed(1)}%` : "0%",
+        "Resultado Operacional de Pista"
+      ]);
+      m.byFuel.forEach((f) => {
+        const pct = m.totalMargem > 0 ? (f.margem / m.totalMargem) * 100 : 0;
+        dreRows.push([
+          `   • Margem - ${f.fuel}`,
+          `${f.litersSold.toLocaleString("pt-BR")} L`,
+          `(+) ${formatBRL(f.margem)}`,
+          `${pct.toFixed(1)}%`,
+          `Margem por Litro: R$ ${f.marginPerLiter.toFixed(2)}/L`
+        ]);
+      });
 
       autoTable(doc, {
         startY: currentY,
-        head: [["Estrutura DRE", "Valor (R$)", "% da Receita", "Descrição / Categoria"]],
+        head: [["Estrutura DRE de Litragem", "Litros", "Valor Estimado (R$)", "% Part.", "Informações Operacionais"]],
         body: dreRows,
         theme: "grid",
         margin: { left: startX, right: 12 },
         headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 8, fontStyle: "bold" },
         columnStyles: {
-          0: { halign: "left", fontStyle: "bold", cellWidth: 70 },
+          0: { halign: "left", cellWidth: 70 },
           1: { halign: "right", fontStyle: "bold" },
-          2: { halign: "center" },
-          3: { halign: "left" },
+          2: { halign: "right", fontStyle: "bold" },
+          3: { halign: "center" },
+          4: { halign: "left" },
         },
-        styles: { fontSize: 7.5, cellPadding: 2.5, lineColor: [226, 232, 240] },
+        styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body") {
+            const label = data.row.raw[0] || "";
+            const isHeaderRow = label.startsWith("1.") || label.startsWith("2.") || label.startsWith("3.");
+            if (isHeaderRow) {
+              data.cell.styles.fontStyle = "bold";
+              data.cell.styles.fillColor = [241, 245, 249];
+              if (label.startsWith("1.")) {
+                data.cell.styles.textColor = [15, 23, 42];
+              } else if (label.startsWith("2.")) {
+                data.cell.styles.textColor = [153, 27, 27];
+              } else if (label.startsWith("3.")) {
+                data.cell.styles.textColor = [21, 128, 61];
+              }
+            }
+          }
+        }
       });
 
       currentY = (doc as any).lastAutoTable.finalY + 8;
@@ -1049,6 +1259,8 @@ function getReportTitle(type: ReportType): string {
       return "Livro de Movimentação de Combustíveis (LMC)";
     case "anp":
       return "Relatório de Qualidade e Calibração ANP";
+    case "afericao":
+      return "Relatório de Aferição de Bicos (Volume e Vazão)";
     case "litrage":
       return "Relatório de Litragem e Estoque de Tanques";
     case "deliveries":

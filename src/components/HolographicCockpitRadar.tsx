@@ -374,7 +374,7 @@ export default function HolographicCockpitRadar({ appState, onNavigate }: Hologr
                       </div>
 
                       <span className="text-[7px] font-mono text-slate-300 truncate max-w-[50px]">
-                        {t.combustivel.split(" ")[0]}
+                        {(t.combustivel || "").split(" ")[0]}
                       </span>
                     </div>
                   );
@@ -415,7 +415,7 @@ export default function HolographicCockpitRadar({ appState, onNavigate }: Hologr
                     <IconComp className="h-4 w-4" />
                   </div>
                   <span className="text-[10px] font-extrabold uppercase font-mono hidden sm:inline-block pr-1">
-                    {sec.name.split(" ")[0]}
+                    {(sec.name || "").split(" ")[0]}
                   </span>
                 </button>
               );

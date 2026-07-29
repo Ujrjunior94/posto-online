@@ -418,7 +418,7 @@ export default function LMCManagement({
       }
 
       const doc = new jsPDF("p", "mm", "a4");
-      const periodText = `${startDate.split("-").reverse().join("/")} a ${endDate.split("-").reverse().join("/")}`;
+      const periodText = `${(startDate || "").split("-").reverse().join("/")} a ${(endDate || "").split("-").reverse().join("/")}`;
       const emissionDate = new Date().toLocaleString("pt-BR");
 
       const startX = 12;
@@ -519,7 +519,7 @@ export default function LMCManagement({
           const sfText = sf === 0 ? "0 L" : `${sf > 0 ? "+" : ""}${sf.toLocaleString("pt-BR")} L`;
 
           return [
-            r.date.split("-").reverse().join("/"),
+            (r.date || "").split("-").reverse().join("/"),
             `${r.openingStock.toLocaleString("pt-BR")} L`,
             `${r.deliveryVolume ? r.deliveryVolume.toLocaleString("pt-BR") : "0"} L`,
             `${r.litersSold.toLocaleString("pt-BR")} L`,
@@ -630,7 +630,7 @@ export default function LMCManagement({
       const reportCompName = (appState.reportHeaderCompanyName || appState.nomePosto || "MEU POSTO").toUpperCase();
       const reportCnpj = appState.reportHeaderCnpj || cnpjPosto;
       const reportAddress = appState.reportHeaderAddress || "";
-      const periodText = `${startDate.split("-").reverse().join("/")} a ${endDate.split("-").reverse().join("/")}`;
+      const periodText = `${(startDate || "").split("-").reverse().join("/")} a ${(endDate || "").split("-").reverse().join("/")}`;
       const emissionDate = new Date().toLocaleString("pt-BR");
 
       let csvContent = "\ufeff"; // UTF-8 BOM
@@ -653,7 +653,7 @@ export default function LMCManagement({
         const physical = Number(r.physicalStock);
         const diff = physical - expected;
 
-        csvContent += `${r.id};${r.date.split("-").reverse().join("/")};${r.fuelType};${opening};${delivery};${sold};${expected};${physical};${diff}\n`;
+        csvContent += `${r.id};${(r.date || "").split("-").reverse().join("/")};${r.fuelType};${opening};${delivery};${sold};${expected};${physical};${diff}\n`;
       });
 
       if (appState.reportSignatureEnabled !== false) {
@@ -739,7 +739,7 @@ export default function LMCManagement({
       doc.setFont("helvetica", "bold");
       doc.text("DATA DO MOVIMENTO:", 145, 38);
       doc.setFont("helvetica", "normal");
-      doc.text(dateStr.split("-").reverse().join("/"), 178, 38);
+      doc.text((dateStr || "").split("-").reverse().join("/"), 178, 38);
 
       doc.line(10, 41, 200, 41);
 
@@ -1152,7 +1152,7 @@ export default function LMCManagement({
                   <div className="space-y-1.5 md:text-right">
                     <p><strong>CNPJ:</strong> {cnpjPosto}</p>
                     <p><strong>INSCRIÇÃO ESTADUAL:</strong> 110.245.890.111</p>
-                    <p className="text-indigo-700"><strong>DATA DO MOVIMENTO:</strong> {viewDate.split("-").reverse().join("/")}</p>
+                    <p className="text-indigo-700"><strong>DATA DO MOVIMENTO:</strong> {(viewDate || "").split("-").reverse().join("/")}</p>
                   </div>
                 </div>
 
@@ -1430,7 +1430,7 @@ export default function LMCManagement({
                             return (
                               <tr key={r.id} className="border-b border-slate-100/60 hover:bg-slate-50/40">
                                 <td className="py-2 px-3 font-semibold text-slate-700">
-                                  {r.date.split("-").reverse().join("/")}
+                                  {(r.date || "").split("-").reverse().join("/")}
                                 </td>
                                 <td className="py-2 px-3 text-right text-slate-500">
                                   {r.openingStock.toLocaleString("pt-BR")}

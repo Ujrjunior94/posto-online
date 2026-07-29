@@ -241,9 +241,15 @@ export default function DailyBalance({
 
   // Calculate yesterday's date string
   const getYesterdayStr = (dateStr: string) => {
-    const d = new Date(dateStr);
-    d.setDate(d.getDate() - 1);
-    return d.toISOString().split("T")[0];
+    if (!dateStr) return "";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "";
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().split("T")[0];
+    } catch (e) {
+      return "";
+    }
   };
 
   // Litrage calculation logic implementing exact user formula:
@@ -421,7 +427,7 @@ export default function DailyBalance({
 
       doc.setFontSize(8);
       doc.setTextColor(75, 85, 99);
-      doc.text(`Referência: ${selectedLitrageDate.split("-").reverse().join("/")}`, endX, 20, { align: "right" });
+      doc.text(`Referência: ${(selectedLitrageDate || "").split("-").reverse().join("/")}`, endX, 20, { align: "right" });
       doc.text(`Emissão: ${emissionDate}`, endX, 24, { align: "right" });
 
       doc.setDrawColor(16, 185, 129);
@@ -431,7 +437,7 @@ export default function DailyBalance({
       doc.setTextColor(51, 65, 85);
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
-      doc.text(`Data de Referência (Hoje): ${selectedLitrageDate.split("-").reverse().join("/")}`, 14, 39);
+      doc.text(`Data de Referência (Hoje): ${(selectedLitrageDate || "").split("-").reverse().join("/")}`, 14, 39);
       doc.text(`Data Anterior (Ontem): ${yesterdayStr.split("-").reverse().join("/")}`, 14, 45);
       doc.text(`Controle Operacional Integrado ERP`, 14, 51);
 
@@ -925,7 +931,7 @@ export default function DailyBalance({
               </div>
 
               <span className="text-xs text-slate-400 font-bold">
-                Ontem considerado: <strong className="text-emerald-300">{getYesterdayStr(selectedLitrageDate).split("-").reverse().join("/")}</strong>
+                Ontem considerado: <strong className="text-emerald-300">{(getYesterdayStr(selectedLitrageDate) || "").split("-").reverse().join("/")}</strong>
               </span>
             </div>
           </div>
@@ -1114,7 +1120,7 @@ export default function DailyBalance({
                       isOpen: true,
                       reportType: "litrage",
                       title: "CONCILIAÇÃO E BALANÇO DE LITRAGEM VOLUMÉTRICA",
-                      subtitle: `Balanço diário em litros ref: ${selectedLitrageDate.split("-").reverse().join("/")}`,
+                      subtitle: `Balanço diário em litros ref: ${(selectedLitrageDate || "").split("-").reverse().join("/")}`,
                       onExportPDF: exportLitragePDF,
                       onExportCSV: exportLitrageCSV,
                     });
@@ -2085,7 +2091,7 @@ export default function DailyBalance({
                       <tbody className="divide-y divide-slate-50">
                         {filteredBalances.map((b) => (
                           <tr key={b.id} className="text-[11px] font-bold text-slate-600 hover:bg-slate-50/50 transition">
-                            <td className="p-4">{b.data.split("-").reverse().join("/")}</td>
+                            <td className="p-4">{(b.data || "").split("-").reverse().join("/")}</td>
                             <td className="p-4">{formatCurrency(b.vendaCombustivel)}</td>
                             <td className="p-4">{formatCurrency(b.vendaLubrificantes)}</td>
                             <td className="p-4 text-rose-400">{formatCurrency(b.totalDespesas)}</td>

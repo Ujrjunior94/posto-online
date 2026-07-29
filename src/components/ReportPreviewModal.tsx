@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Download, Eye, Settings2, FileText, Check, Upload, Image as ImageIcon } from "lucide-react";
 import { AppState } from "../types";
-import { ReportType } from "../utils/reportExporter";
+import { ReportType, computeLitersMetrics } from "../utils/reportExporter";
 
 interface ReportPreviewModalProps {
   isOpen: boolean;
@@ -89,6 +89,7 @@ export default function ReportPreviewModal({
           accentText: "text-emerald-700",
         };
       case "anp":
+      case "afericao":
         return {
           primary: "bg-slate-900 hover:bg-slate-800",
           border: "border-slate-900",
@@ -457,6 +458,47 @@ export default function ReportPreviewModal({
                     </>
                   )}
 
+                  {reportType === "afericao" && (
+                    <>
+                      <div className="bg-slate-50 p-1.5 rounded flex justify-between items-center text-[7px] border border-slate-100">
+                        <span className="font-bold text-slate-700">Equipamento de Teste:</span>
+                        <span className="text-slate-500">Balde de Ensaio Volumétrico 20L Calibrado (Inmetro)</span>
+                      </div>
+                      <div className="border border-slate-100 rounded overflow-hidden mt-2">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 text-[6.5px] font-bold text-slate-600 border-b border-slate-100">
+                              <th className="p-1">Bico</th>
+                              <th className="p-1">Combustível</th>
+                              <th className="p-1 text-center">Desvio (mL)</th>
+                              <th className="p-1 text-right">Laudo Geral</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr className="border-b border-slate-50 text-[6px] text-slate-500">
+                              <td className="p-1 font-bold">Bico 01</td>
+                              <td className="p-1">Gasolina Comum</td>
+                              <td className="p-1 text-center text-emerald-600">+10 mL</td>
+                              <td className="p-1 text-right text-emerald-600 font-bold">APROVADO</td>
+                            </tr>
+                            <tr className="border-b border-slate-50 text-[6px] text-slate-500">
+                              <td className="p-1 font-bold">Bico 02</td>
+                              <td className="p-1">Etanol Comum</td>
+                              <td className="p-1 text-center text-rose-500">-25 mL</td>
+                              <td className="p-1 text-right text-emerald-600 font-bold">APROVADO</td>
+                            </tr>
+                            <tr className="text-[6px] text-slate-500">
+                              <td className="p-1 font-bold">Bico 03</td>
+                              <td className="p-1">Diesel S10</td>
+                              <td className="p-1 text-center text-emerald-600">0 mL</td>
+                              <td className="p-1 text-right text-emerald-600 font-bold">APROVADO</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
                   {reportType === "anp" && (
                     <>
                       <div className="bg-slate-50 p-1.5 rounded flex justify-between items-center text-[7px] border border-slate-100">
@@ -605,54 +647,63 @@ export default function ReportPreviewModal({
                   )}
 
                   {(reportType === "dre" || reportType === "consolidated") && (() => {
-                    let tComb = 0, tLub = 0, tOut = 0, tDesp = 0;
-                    (appState.dailyBalances || []).forEach(b => {
-                      tComb += Number(b.vendaCombustivel) || 0;
-                      tLub += Number(b.vendaLubrificantes) || 0;
-                      tOut += Number(b.outrasReceitas) || 0;
-                      tDesp += Number(b.totalDespesas) || 0;
-                    });
-                    const tRec = tComb + tLub + tOut;
-                    const lucro = tRec - tDesp;
-                    const margem = tRec > 0 ? (lucro / tRec) * 100 : 0;
+                    const dates = (appState.lmc || []).map((r) => r.date).sort();
+                    const minDate = dates.length > 0 ? dates[0].substring(0, 10) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10);
+                    const maxDate = dates.length > 0 ? dates[dates.length - 1].substring(0, 10) : new Date().toISOString().substring(0, 10);
+                    const m = computeLitersMetrics(appState, minDate, maxDate);
 
                     return (
                       <div className="border border-slate-100 rounded overflow-hidden mt-2">
                         <div className="bg-slate-800 text-white px-2 py-1 font-bold text-[7px] uppercase flex justify-between">
-                          <span>Demonstrativo do Resultado do Exercício (DRE)</span>
-                          <span>Margem Líquida: {margem.toFixed(1)}%</span>
+                          <span>Demonstrativo de Resultado de Litragem (DRE de Litragem)</span>
+                          <span>Margem Média: R$ {m.averageMarginPerLiter.toFixed(2)}/L</span>
                         </div>
-                        <table className="w-full text-left border-collapse text-[6px]">
+                        <table className="w-full text-left border-collapse text-[5.5px]">
                           <tbody>
+                            {/* Section 1 */}
                             <tr className="bg-slate-100 font-bold border-b border-slate-200">
-                              <td className="p-1">(+) RECEITA BRUTA OPERACIONAL</td>
-                              <td className="p-1 text-right text-emerald-700 font-bold">R$ {tRec.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                              <td className="p-1">1. VOLUME DE VENDAS E FATURAMENTO BRUTO</td>
+                              <td className="p-1 text-right">{m.totalLitersSold.toLocaleString("pt-BR")} L</td>
+                              <td className="p-1 text-right text-emerald-700 font-bold">R$ {m.totalFaturamento.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                               <td className="p-1 text-right font-normal">100.0%</td>
                             </tr>
-                            <tr className="border-b border-slate-50 text-slate-600">
-                              <td className="p-1 pl-3">1.1 Vendas de Combustíveis</td>
-                              <td className="p-1 text-right">R$ {tComb.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1 text-right">{tRec > 0 ? ((tComb/tRec)*100).toFixed(1) : 0}%</td>
+                            {m.byFuel.slice(0, 3).map((f) => {
+                              const pct = m.totalLitersSold > 0 ? (f.litersSold / m.totalLitersSold) * 100 : 0;
+                              return (
+                                <tr key={`f-${f.fuel}`} className="border-b border-slate-50 text-slate-500">
+                                  <td className="p-1 pl-3">Venda - {f.fuel}</td>
+                                  <td className="p-1 text-right">{f.litersSold.toLocaleString("pt-BR")} L</td>
+                                  <td className="p-1 text-right">R$ {f.faturamento.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-1 text-right">{pct.toFixed(1)}%</td>
+                                </tr>
+                              );
+                            })}
+
+                            {/* Section 2 */}
+                            <tr className="bg-rose-50/50 font-bold border-b border-slate-200 text-rose-950">
+                              <td className="p-1">2. CUSTO DE AQUISIÇÃO DAS MERCADORIAS (CMV)</td>
+                              <td className="p-1 text-right">{m.totalLitersSold.toLocaleString("pt-BR")} L</td>
+                              <td className="p-1 text-right text-rose-700 font-bold">R$ {m.totalCusto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="p-1 text-right font-normal">{m.totalFaturamento > 0 ? ((m.totalCusto/m.totalFaturamento)*100).toFixed(1) : 0}%</td>
                             </tr>
-                            <tr className="border-b border-slate-50 text-slate-600">
-                              <td className="p-1 pl-3">1.2 Vendas de Lubrificantes</td>
-                              <td className="p-1 text-right">R$ {tLub.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1 text-right">{tRec > 0 ? ((tLub/tRec)*100).toFixed(1) : 0}%</td>
-                            </tr>
-                            <tr className="border-b border-slate-50 text-slate-600">
-                              <td className="p-1 pl-3">1.3 Outras Receitas</td>
-                              <td className="p-1 text-right">R$ {tOut.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1 text-right">{tRec > 0 ? ((tOut/tRec)*100).toFixed(1) : 0}%</td>
-                            </tr>
-                            <tr className="bg-rose-50 font-bold border-b border-rose-100 text-rose-900">
-                              <td className="p-1">(-) DESPESAS OPERACIONAIS TOTAIS</td>
-                              <td className="p-1 text-right text-rose-700">R$ {tDesp.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1 text-right">{tRec > 0 ? ((tDesp/tRec)*100).toFixed(1) : 0}%</td>
-                            </tr>
-                            <tr className={`font-bold ${lucro >= 0 ? "bg-emerald-100 text-emerald-950" : "bg-rose-100 text-rose-950"}`}>
-                              <td className="p-1">(=) LUCRO / PREJUÍZO LÍQUIDO DO PERÍODO</td>
-                              <td className="p-1 text-right text-[7px]">R$ {lucro.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                              <td className="p-1 text-right text-[7px]">{margem.toFixed(1)}%</td>
+                            {m.byFuel.slice(0, 3).map((f) => {
+                              const pct = m.totalFaturamento > 0 ? (f.custo / m.totalFaturamento) * 100 : 0;
+                              return (
+                                <tr key={`c-${f.fuel}`} className="border-b border-slate-50 text-slate-500">
+                                  <td className="p-1 pl-3">CMV - {f.fuel}</td>
+                                  <td className="p-1 text-right">{f.litersSold.toLocaleString("pt-BR")} L</td>
+                                  <td className="p-1 text-right">R$ {f.custo.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                  <td className="p-1 text-right">{pct.toFixed(1)}%</td>
+                                </tr>
+                              );
+                            })}
+
+                            {/* Section 3 */}
+                            <tr className="bg-emerald-50 font-bold text-emerald-950 border-b border-emerald-100">
+                              <td className="p-1">3. APURAÇÃO DA MARGEM DE CONTRIBUIÇÃO</td>
+                              <td className="p-1 text-right">{m.totalLitersSold.toLocaleString("pt-BR")} L</td>
+                              <td className="p-1 text-right text-emerald-700 font-bold">R$ {m.totalMargem.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="p-1 text-right text-[6px]">{m.totalFaturamento > 0 ? ((m.totalMargem/m.totalFaturamento)*100).toFixed(1) : 0}%</td>
                             </tr>
                           </tbody>
                         </table>

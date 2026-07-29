@@ -1757,7 +1757,8 @@ export default function ShiftsChecklists({
         let userLegendText = "";
         activeUsersOfPosto.forEach((u) => {
           const initials = getInitials(u.nomeCompleto);
-          userLegendText += `${initials} → ${u.nomeCompleto.split(" ")[0]} ${u.nomeCompleto.split(" ")[1] || ""}  |  `;
+          const nameParts = (u.nomeCompleto || "").split(" ");
+          userLegendText += `${initials} → ${nameParts[0] || ""} ${nameParts[1] || ""}  |  `;
         });
         if (userLegendText.endsWith("  |  ")) {
           userLegendText = userLegendText.slice(0, -5);
@@ -2874,7 +2875,7 @@ export default function ShiftsChecklists({
                       >
                         <GripVertical className="h-3 w-3 text-slate-400 shrink-0" />
                         <UserAvatar user={emp} size="xs" />
-                        <span className="text-[11px] font-bold truncate max-w-[80px]">⛽ {emp.nomeCompleto.split(" ")[0]}</span>
+                        <span className="text-[11px] font-bold truncate max-w-[80px]">⛽ {(emp.nomeCompleto || "").split(" ")[0]}</span>
                         {isAllocated && <span className="text-[8px] bg-emerald-600 text-white rounded-full h-3.5 w-3.5 flex items-center justify-center font-bold">✓</span>}
                       </button>
                     );
@@ -2918,7 +2919,7 @@ export default function ShiftsChecklists({
                         >
                           {activeDayShifts.map((s) => (
                             <option key={s.id} value={s.id}>
-                              {s.frentistaResponsavel.split(" ")[0]} ({s.turno.split(" ")[0]})
+                              {(s.frentistaResponsavel || "").split(" ")[0]} ({(s.turno || "").split(" ")[0]})
                             </option>
                           ))}
                         </select>
@@ -3131,7 +3132,7 @@ export default function ShiftsChecklists({
                             <div className="flex items-center gap-1 text-[8.5px] text-rose-700/80 font-mono mt-0.5">
                               <span>⏰ Registrado às:</span>
                               <span className="font-extrabold">
-                                {o.dataHora ? o.dataHora.split(" ")[1] || o.dataHora : "N/I"}
+                                {o.dataHora ? (o.dataHora || "").split(" ")[1] || o.dataHora : "N/I"}
                               </span>
                             </div>
 
@@ -3603,7 +3604,7 @@ export default function ShiftsChecklists({
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-mono font-bold text-slate-500">
-                                {sh.data.split("-").reverse().join("/")}
+                                 {(sh.data || "").split("-").reverse().join("/")}
                               </span>
                               <div className="flex gap-1.5">
                                 <span

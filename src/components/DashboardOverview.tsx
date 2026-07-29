@@ -68,6 +68,7 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
     nozzleClosings = [], 
     qualityAudits = [], 
     nozzles = [],
+    calibrations = [],
     dailyBalances = [],
     dashboardPreferences 
   } = appState;
@@ -109,6 +110,50 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
   const activeNozzles = nozzles.filter(n => n.status === "Ativo" || n.status === "Livre").length;
   const blockedNozzles = nozzles.filter(n => n.status === "Manutencao" || n.status === "Bloqueado").length;
   const totalNozzles = nozzles.length || 12;
+
+  // Calibrations Executive Summary Calculations
+  const now = new Date();
+  const calibrationStatusList = (nozzles || []).map(n => {
+    const nozzleCals = (calibrations || []).filter(c => c.nozzleId === n.id);
+    if (nozzleCals.length === 0) {
+      return { nozzleId: n.id, status: "Pendente", lastDate: null, bomba: n.bombaAssociada };
+    }
+    const sortedCals = [...nozzleCals].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    const lastCal = sortedCals[0];
+    const daysDiff = (now.getTime() - new Date(lastCal.data).getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (!lastCal.conforme) {
+      return { nozzleId: n.id, status: "Reprovado", lastDate: lastCal.data, bomba: n.bombaAssociada };
+    }
+    if (daysDiff > 30) {
+      return { nozzleId: n.id, status: "Vencido", lastDate: lastCal.data, bomba: n.bombaAssociada };
+    }
+    return { nozzleId: n.id, status: "Conforme", lastDate: lastCal.data, bomba: n.bombaAssociada };
+  });
+
+  const totalConforme = calibrationStatusList.filter(s => s.status === "Conforme").length;
+  const totalPendente = calibrationStatusList.filter(s => s.status === "Pendente").length;
+  const totalVencido = calibrationStatusList.filter(s => s.status === "Vencido").length;
+  const totalReprovado = calibrationStatusList.filter(s => s.status === "Reprovado").length;
+
+  const hasPendingOrOverdueCalibrations = totalPendente > 0 || totalVencido > 0 || totalReprovado > 0;
+
+  const getNextAnpDate = () => {
+    const conformCals = calibrationStatusList.filter(s => s.status === "Conforme" && s.lastDate);
+    if (conformCals.length > 0) {
+      const oldestConform = conformCals.reduce((oldest, current) => {
+        if (!oldest.lastDate || !current.lastDate) return oldest;
+        return new Date(current.lastDate).getTime() < new Date(oldest.lastDate).getTime() ? current : oldest;
+      }, conformCals[0]);
+      if (oldestConform.lastDate) {
+        const nextDate = new Date(oldestConform.lastDate);
+        nextDate.setDate(nextDate.getDate() + 30);
+        return nextDate.toLocaleDateString("pt-BR");
+      }
+    }
+    return "31/07/2026"; // Standard ANP Monthly compliance boundary
+  };
+  const proximaDataANP = getNextAnpDate();
 
   // Generate dynamic priority alerts
   const generateAlerts = () => {
@@ -915,7 +960,7 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
       )}
 
       {/* 6. OPERAÇÃO DE TURNO & QUALIDADE */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Active Shift Card */}
         {localPrefs.visibleWidgets.activeShift !== false && (
@@ -1044,6 +1089,80 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
             )}
           </div>
         )}
+
+        {/* Resumo Executivo de Aferições (ANP Calibration Summary) */}
+        <div className="bg-[#191c22] p-6 rounded-2xl border border-slate-800 shadow-2xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/20">
+                  <Gauge className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-white uppercase tracking-wide">
+                    Aferições de Vazão (ANP)
+                  </h3>
+                  <p className="text-xs text-slate-400">Resumo de conformidade dos bicos</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onNavigate("qualidade")}
+                className="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Painel ANP</span>
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Status das calibrações */}
+            <div className="mt-4 space-y-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Status das Calibrações</span>
+              <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold font-mono">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-2.5 rounded-xl">
+                  <span className="block text-base font-black font-sans">{totalConforme}</span>
+                  <span className="text-[9px] uppercase font-sans">Em dia</span>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-2.5 rounded-xl">
+                  <span className="block text-base font-black font-sans">{totalVencido + totalReprovado}</span>
+                  <span className="text-[9px] uppercase font-sans">Vencidos</span>
+                </div>
+                <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-2.5 rounded-xl">
+                  <span className="block text-base font-black font-sans">{totalPendente}</span>
+                  <span className="text-[9px] uppercase font-sans">Pendentes</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Próxima data de aferição exigida pela ANP */}
+            <div className="mt-4 flex items-center justify-between p-3 bg-slate-900 border border-slate-800 rounded-xl">
+              <span className="text-[11px] text-slate-400 font-bold uppercase">Próxima Exigência ANP:</span>
+              <span className="text-xs text-amber-300 font-black bg-amber-400/10 border border-amber-400/20 px-2.5 py-1 rounded-lg font-mono">
+                {proximaDataANP}
+              </span>
+            </div>
+          </div>
+
+          {/* Alerta visual caso alguma bomba esteja com aferição pendente */}
+          <div className="mt-4">
+            {hasPendingOrOverdueCalibrations ? (
+              <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl flex items-start gap-2.5 text-xs text-rose-300 font-bold animate-pulse">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+                <div>
+                  <span className="block font-black uppercase text-[10px] tracking-wider text-rose-200">Atenção! Bomba Pendente</span>
+                  <span className="text-[10px] font-medium text-slate-400 leading-snug block mt-0.5">
+                    Existem bicos de abastecimento sem aferição válida ou fora do prazo regulamentar.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2.5 text-xs text-emerald-400 font-bold">
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span className="text-[10px]">Todas as bombas em total conformidade ANP.</span>
+              </div>
+            )}
+          </div>
+        </div>
 
       </div>
 

@@ -218,6 +218,7 @@ export default function ANPQualityControl({
 
   // Active view inside Quality tab: "afericao" (Calibrations), "laudo" (Chemical Quality), "entregas" (Fuel Deliveries), "especificacoes_2026" (ANP 2026 Specs Table)
   const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas" | "especificacoes_2026" | "tabela_conferencia">("afericao");
+  const [onlyPendingOrOverdue, setOnlyPendingOrOverdue] = useState(false);
 
   // Selection state for batch actions
   const [selectedCalibrations, setSelectedCalibrations] = useState<{ [key: string]: boolean }>({});
@@ -298,6 +299,69 @@ export default function ANPQualityControl({
   const [error, setError] = useState("");
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
   const [isSpecsExpanded, setIsSpecsExpanded] = useState(true);
+
+  // Calculate pending or overdue calibrations per nozzle
+  const nowTime = new Date();
+  const nozzleStatusList = (nozzles || []).map((n) => {
+    const nozzleCals = (calibrations || []).filter((c) => c.nozzleId === n.id);
+    const tank = (appState.tanks || []).find((t) => t.id === n.tanqueId);
+    
+    if (nozzleCals.length === 0) {
+      return {
+        nozzle: n,
+        tank,
+        status: "Pendente",
+        lastCalDate: null,
+        daysSinceLast: Infinity,
+        reason: "Sem registros de aferição recente no sistema.",
+        action: "Realizar aferição física de 20L imediatamente para regularização.",
+        conforme: false,
+      };
+    }
+    
+    const sortedCals = [...nozzleCals].sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+    const lastCal = sortedCals[0];
+    const daysSince = Math.floor((nowTime.getTime() - new Date(lastCal.data).getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (!lastCal.conforme) {
+      return {
+        nozzle: n,
+        tank,
+        status: "Reprovado",
+        lastCalDate: lastCal.data,
+        daysSinceLast: daysSince,
+        reason: `Reprovado no último teste com desvio de ${lastCal.desvioMl} mL.`,
+        action: "Bomba reprovada! Corrija a vazão do bico mecanicamente e recalibre.",
+        conforme: false,
+      };
+    }
+    
+    if (daysSince > 30) {
+      return {
+        nozzle: n,
+        tank,
+        status: "Vencido",
+        lastCalDate: lastCal.data,
+        daysSinceLast: daysSince,
+        reason: `Vencido há ${daysSince} dias (Prazo regulamentar ANP é de 30 dias).`,
+        action: "Realizar aferição diária de 20L de rotina para validar bico.",
+        conforme: false,
+      };
+    }
+    
+    return {
+      nozzle: n,
+      tank,
+      status: "Em dia",
+      lastCalDate: lastCal.data,
+      daysSinceLast: daysSince,
+      reason: `Aferição conforme realizada há ${daysSince} dias.`,
+      action: "Bico conforme. Nenhuma ação operacional imediata requerida.",
+      conforme: true,
+    };
+  });
+
+  const pendingOrOverdueNozzles = nozzleStatusList.filter((item) => !item.conforme);
 
   const handleExportDeliveriesPDF = () => {
     exportReportPDF({
@@ -1798,8 +1862,8 @@ export default function ANPQualityControl({
               </div>
 
               {/* Cumulative summary for selected calibrations */}
-              {Object.values(selectedCalibrations).filter(Boolean).length > 0 && (
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between items-center">
+              {Object.values(selectedCalibrations).filter(Boolean).length > 0 && !onlyPendingOrOverdue && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 flex justify-between items-center animate-in fade-in duration-200">
                   <div>
                     <span className="text-[10px] font-bold text-indigo-400 uppercase block">Total Selecionado</span>
                     <span className="text-lg font-black text-indigo-700">
@@ -1819,86 +1883,189 @@ export default function ANPQualityControl({
                   </div>
                 </div>
               )}
+
+              {/* Quick filter block */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200/60 p-3 rounded-2xl">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-indigo-600" />
+                  <span className="text-xs font-black text-slate-700 uppercase tracking-wide">Filtros Rápidos</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOnlyPendingOrOverdue(false)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      !onlyPendingOrOverdue
+                        ? "bg-indigo-600 text-white shadow-sm font-extrabold"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    Histórico Geral
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnlyPendingOrOverdue(true)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer relative ${
+                      onlyPendingOrOverdue
+                        ? "bg-rose-600 text-white shadow-sm font-extrabold"
+                        : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span>Pendentes ou Vencidos</span>
+                    {pendingOrOverdueNozzles.length > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black h-5 w-5 rounded-full flex items-center justify-center border-2 border-white animate-pulse">
+                        {pendingOrOverdueNozzles.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
                   <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
-                    <th className="py-2.5 px-3">
-                      <input
-                        type="checkbox"
-                        onChange={handleSelectAllCalibrations}
-                        className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
-                      />
-                    </th>
-                    <th className="py-2.5 px-3">Data</th>
-                    <th className="py-2.5 px-3">Bico</th>
-                    <th className="py-2.5 px-3">Valor (R$)</th>
-                    <th className="py-2.5 px-3">Desvio Medido</th>
-                    <th className="py-2.5 px-3">Veredicto</th>
-                    <th className="py-2.5 px-3">Operador</th>
-                    <th className="py-2.5 px-3">Ações</th>
+                    {onlyPendingOrOverdue ? (
+                      <>
+                        <th className="py-2.5 px-3">Status</th>
+                        <th className="py-2.5 px-3">Bico / Bomba</th>
+                        <th className="py-2.5 px-3">Combustível</th>
+                        <th className="py-2.5 px-3">Última Aferição</th>
+                        <th className="py-2.5 px-3">Dias Decorridos</th>
+                        <th className="py-2.5 px-3">Diagnóstico</th>
+                        <th className="py-2.5 px-3" colSpan={2}>Ação Recomendada</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="py-2.5 px-3">
+                          <input
+                            type="checkbox"
+                            onChange={handleSelectAllCalibrations}
+                            className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
+                          />
+                        </th>
+                        <th className="py-2.5 px-3">Data</th>
+                        <th className="py-2.5 px-3">Bico</th>
+                        <th className="py-2.5 px-3">Valor (R$)</th>
+                        <th className="py-2.5 px-3">Desvio Medido</th>
+                        <th className="py-2.5 px-3">Veredicto</th>
+                        <th className="py-2.5 px-3">Operador</th>
+                        <th className="py-2.5 px-3">Ações</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {calibrations.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">Nenhuma aferição física registrada ainda.</td>
-                    </tr>
-                  ) : (
-                    calibrations
-                      .slice()
-                      .reverse()
-                      .map((cal) => {
-                        const b = nozzles.find((nozzle) => nozzle.id === cal.nozzleId);
-                        const isChecked = !!selectedCalibrations[cal.id];
+                  {onlyPendingOrOverdue ? (
+                    pendingOrOverdueNozzles.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-emerald-600 font-bold bg-emerald-50/40 rounded-xl">
+                          🎉 Excelente! Todos os bicos de abastecimento estão com a aferição de 20L em dia e conformes.
+                        </td>
+                      </tr>
+                    ) : (
+                      pendingOrOverdueNozzles.map((item) => {
+                        const { nozzle, tank, status, lastCalDate, daysSinceLast, reason, action } = item;
                         return (
-                          <tr key={cal.id} className="border-b border-slate-100 hover:bg-slate-50/40">
-                            <td className="py-2.5 px-3">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={() => handleToggleSelectCalibration(cal.id)}
-                                className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
-                              />
-                            </td>
-                            <td className="py-2.5 px-3 font-semibold text-slate-600">{cal.data.split("-").reverse().join("/")}</td>
-                            <td className="py-2.5 px-3">
-                              <span className="font-bold text-slate-800">
-                                Bico {b ? b.numeroBico : "Bico Geral"}
+                          <tr key={nozzle.id} className="border-b border-rose-100 hover:bg-rose-50/20 bg-rose-50/5">
+                            <td className="py-3 px-3">
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                status === "Pendente" 
+                                  ? "bg-amber-100 text-amber-800 border border-amber-200" 
+                                  : "bg-rose-100 text-rose-800 border border-rose-200 animate-pulse"
+                              }`}>
+                                {status}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-700">
-                              R$ {(cal.valorReais || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <td className="py-3 px-3">
+                              <span className="font-bold text-slate-800">Bico {nozzle.numeroBico}</span>
+                              <span className="block text-[10px] text-slate-500">Bomba {nozzle.bombaAssociada}</span>
                             </td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                              {cal.desvioMl > 0 ? `+${cal.desvioMl}` : cal.desvioMl} mL
+                            <td className="py-3 px-3 text-slate-600 font-semibold text-[11px]">
+                              {tank ? tank.combustivel : "Não definido"}
                             </td>
-                            <td className="py-2.5 px-3">
-                              <span
-                                className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
-                                  cal.conforme
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                                    : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
-                                }`}
-                              >
-                                {cal.conforme ? "CONFORME" : "REJEITADO"}
-                              </span>
+                            <td className="py-3 px-3 font-semibold text-[11px] text-slate-600">
+                              {lastCalDate ? lastCalDate.split("-").reverse().join("/") : "Sem registro"}
                             </td>
-                            <td className="py-2.5 px-3 text-slate-500">{cal.operadorResponsavel}</td>
-                            <td className="py-2.5 px-3 text-right">
-                              <button
-                                onClick={() => handleDeleteCalibration(cal.id)}
-                                className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-                                title="Excluir Registro"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                            <td className="py-3 px-3 font-semibold text-[11px] text-slate-600">
+                              {daysSinceLast === Infinity ? "—" : `${daysSinceLast} dias`}
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="flex items-start gap-1.5 text-[10px] text-slate-500 font-medium max-w-xs">
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                <span>{reason}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3" colSpan={2}>
+                              <div className="p-2 bg-rose-500/10 text-rose-700 border border-rose-200/50 rounded-lg text-[10px] font-bold leading-normal">
+                                👉 {action}
+                              </div>
                             </td>
                           </tr>
                         );
                       })
+                    )
+                  ) : (
+                    calibrations.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-slate-500 italic">Nenhuma aferição física registrada ainda.</td>
+                      </tr>
+                    ) : (
+                      calibrations
+                        .slice()
+                        .reverse()
+                        .map((cal) => {
+                          const b = nozzles.find((nozzle) => nozzle.id === cal.nozzleId);
+                          const isChecked = !!selectedCalibrations[cal.id];
+                          return (
+                            <tr key={cal.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                              <td className="py-2.5 px-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={() => handleToggleSelectCalibration(cal.id)}
+                                  className="rounded border-slate-300 h-3.5 w-3.5 text-indigo-600"
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 font-semibold text-slate-600">{cal.data.split("-").reverse().join("/")}</td>
+                              <td className="py-2.5 px-3">
+                                <span className="font-bold text-slate-800">
+                                  Bico {b ? b.numeroBico : "Bico Geral"}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-emerald-700">
+                                R$ {(cal.valorReais || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                                {cal.desvioMl > 0 ? `+${cal.desvioMl}` : cal.desvioMl} mL
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span
+                                  className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
+                                    cal.conforme
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                      : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
+                                  }`}
+                                >
+                                  {cal.conforme ? "CONFORME" : "REJEITADO"}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-slate-500">{cal.operadorResponsavel}</td>
+                              <td className="py-2.5 px-3 text-right">
+                                <button
+                                  onClick={() => handleDeleteCalibration(cal.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+                                  title="Excluir Registro"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                    )
                   )}
                 </tbody>
               </table>
