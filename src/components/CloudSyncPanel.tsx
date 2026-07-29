@@ -922,7 +922,7 @@ export default function CloudSyncPanel({
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json && (json.tanks || json.timesheetEntries || json.lmcRecords || json.users)) {
+        if (json && (json.tanks || json.timesheetEntries || json.lmc || json.lmcRecords || json.users)) {
           if (confirm(`Deseja restaurar a base de dados do posto a partir do arquivo "${file.name}"? As informações atuais serão atualizadas.`)) {
             onRestoreState(json);
             onAddAuditLog("RESTORE", "Segurança", `Banco de dados restaurado a partir do arquivo local JSON "${file.name}"`, "Regular");

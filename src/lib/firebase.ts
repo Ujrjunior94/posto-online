@@ -10,6 +10,7 @@ import {
   signInWithPopup as firebaseSignInWithPopup,
   signInWithRedirect,
   getRedirectResult,
+  signInWithCredential,
   User as FirebaseUser
 } from "firebase/auth";
 import { 
@@ -91,101 +92,103 @@ const logAuthTelemetry = async (logId: string, stage: string, status: "success" 
 
 // Robust helper to perform safe Google Sign-In with automatic fallback to Redirect on popup blocks or PWA environments
 const safeSignInWithGoogle = async () => {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: "select_account" });
-  
   const logId = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   
-  try {
-    await logAuthTelemetry(logId, "popup", "success", { message: "Iniciando login via popup Google" });
-    const result = await firebaseSignInWithPopup(auth, provider);
-    await logAuthTelemetry(logId, "popup", "success", { 
-      message: "Autenticado via popup Google com sucesso", 
-      uid: result.user?.uid,
-      email: result.user?.email 
-    });
-    return result;
-  } catch (error: any) {
-    console.warn("signInWithPopup falhou, avaliando fallback para signInWithRedirect:", error);
-    
-    const isUserCancelled = error.code === "auth/popup-closed-by-user" || error.message?.includes("closed");
-    const isBlockedOrRestricted = 
-      error.code === "auth/popup-blocked" || 
-      error.code === "auth/operation-not-supported" ||
-      error.code === "auth/iframe-user-cancelled" ||
-      error.code === "auth/network-request-failed" ||
-      /blocked|restricted|iframe|sandbox|network/i.test(error.message || "") ||
-      /popup/i.test(error.code || "");
+  await logAuthTelemetry(logId, "popup", "success", { message: "Iniciando login via popup seguro mesmo-origem" });
 
-    const isMobile = typeof navigator !== "undefined" && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator?.userAgent || ""
+  return new Promise<any>((resolve, reject) => {
+    const popupWidth = 550;
+    const popupHeight = 650;
+    const left = window.screen.width / 2 - popupWidth / 2;
+    const top = window.screen.height / 2 - popupHeight / 2;
+    
+    const popup = window.open(
+      "/google-auth.html",
+      "google_firebase_auth_popup",
+      `width=${popupWidth},height=${popupHeight},left=${left},top=${top}`
     );
 
-    await logAuthTelemetry(logId, "popup", "failed", { 
-      errorCode: error.code, 
-      errorMessage: error.message,
-      isUserCancelled,
-      isBlockedOrRestricted,
-      isMobile
-    });
-
-    if (isBlockedOrRestricted || isMobile || !isUserCancelled) {
-      console.log("Iniciando redirect como fallback robusto...");
-      try {
-        if (typeof window !== "undefined" && window.localStorage) {
-          localStorage.setItem("pending_auth_log_id", logId);
-        }
-        await logAuthTelemetry(logId, "redirect_fallback", "pending_redirect", { 
-          message: "Redirecionando usuário para Google Auth" 
-        });
-        await signInWithRedirect(auth, provider);
-        return null;
-      } catch (redirectErr: any) {
-        await logAuthTelemetry(logId, "redirect_fallback", "failed", { 
-          errorCode: redirectErr.code, 
-          errorMessage: redirectErr.message 
-        });
-        console.error("signInWithRedirect falhou:", redirectErr);
-        throw redirectErr;
-      }
+    if (!popup) {
+      const popupError = new Error("Bloqueador de popups detectado. Por favor, autorize popups para este site para continuar com o login do Google.");
+      (popupError as any).code = "auth/popup-blocked";
+      logAuthTelemetry(logId, "popup", "failed", { errorCode: "auth/popup-blocked", errorMessage: popupError.message });
+      reject(popupError);
+      return;
     }
-    
-    throw error;
-  }
+
+    const handleMessage = async (event: MessageEvent) => {
+      // Validate origin
+      const origin = event.origin;
+      if (!origin.endsWith(".run.app") && !origin.includes("localhost") && !origin.includes("web-preview")) {
+        return;
+      }
+
+      if (event.data?.type === "GOOGLE_AUTH_SUCCESS") {
+        window.removeEventListener("message", handleMessage);
+        clearInterval(timer);
+        
+        const { idToken, uid, email } = event.data;
+        try {
+          const credential = GoogleAuthProvider.credential(idToken);
+          const result = await signInWithCredential(auth, credential);
+          
+          await logAuthTelemetry(logId, "popup", "success", { 
+            message: "Autenticado com sucesso via popup-proxy", 
+            uid,
+            email 
+          });
+          
+          resolve(result);
+        } catch (authErr: any) {
+          await logAuthTelemetry(logId, "popup", "failed", { 
+            errorCode: authErr.code || "unknown", 
+            errorMessage: authErr.message || "Erro ao fazer login com credencial" 
+          });
+          reject(authErr);
+        }
+      } else if (event.data?.type === "GOOGLE_AUTH_ERROR") {
+        window.removeEventListener("message", handleMessage);
+        clearInterval(timer);
+        
+        const errorMsg = event.data.error || "Erro desconhecido no popup";
+        const customErr: any = new Error(errorMsg);
+        customErr.code = "auth/popup-closed-by-user"; // Fallback to graceful message
+        
+        await logAuthTelemetry(logId, "popup", "failed", { 
+          errorCode: "GOOGLE_AUTH_ERROR", 
+          errorMessage: errorMsg 
+        });
+        
+        reject(customErr);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer);
+        setTimeout(() => {
+          window.removeEventListener("message", handleMessage);
+          
+          const userClosedErr: any = new Error("O login via Google foi cancelado antes de ser concluído.");
+          userClosedErr.code = "auth/popup-closed-by-user";
+          
+          logAuthTelemetry(logId, "popup", "failed", { 
+            errorCode: "auth/popup-closed-by-user", 
+            errorMessage: "Popup fechado pelo usuário" 
+          });
+          
+          reject(userClosedErr);
+        }, 300);
+      }
+    }, 1000);
+  });
 };
 
-// Custom wrapped signInWithPopup with automatic fallback to signInWithRedirect (legacy placeholder wrapper)
+// Custom wrapped signInWithPopup (legacy placeholder wrapper, now mapping to safeSignInWithGoogle)
 const signInWithPopup = async (authInstance: any, providerInstance: any) => {
-  try {
-    return await firebaseSignInWithPopup(authInstance, providerInstance);
-  } catch (error: any) {
-    console.warn("signInWithPopup falhou, tentando fallback com signInWithRedirect:", error);
-
-    const isUserCancelled = error.code === "auth/popup-closed-by-user" || error.message?.includes("closed");
-    const isBlockedOrRestricted = 
-      error.code === "auth/popup-blocked" || 
-      error.code === "auth/operation-not-supported" ||
-      error.code === "auth/iframe-user-cancelled" ||
-      /blocked|restricted|iframe|sandbox/i.test(error.message || "") ||
-      /popup/i.test(error.code || "");
-
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator?.userAgent || ""
-    );
-
-    if (isBlockedOrRestricted || isMobile || !isUserCancelled) {
-      console.log("Ambiente restrito ou erro de popup detectado. Iniciando redirecionamento...");
-      try {
-        await signInWithRedirect(authInstance, providerInstance);
-        return null;
-      } catch (redirectErr) {
-        console.error("signInWithRedirect falhou também:", redirectErr);
-        throw error;
-      }
-    }
-    
-    throw error;
-  }
+  return safeSignInWithGoogle();
 };
 
 export { 

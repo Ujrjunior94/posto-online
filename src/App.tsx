@@ -890,13 +890,67 @@ export default function App() {
   };
 
   const handleRestoreState = (restoredState: AppState) => {
-    // Keep users intact so the current user doesn't lose login session
-    const currentUsers = appState.users;
-    const mergedState = {
-      ...restoredState,
-      users: restoredState.users && restoredState.users.length > 0 ? restoredState.users : currentUsers,
+    // Safely map and fallback all state properties to empty arrays if missing from the backup JSON
+    const cleanRestored: AppState = {
+      users: Array.isArray(restoredState.users) ? restoredState.users : [],
+      tanks: Array.isArray(restoredState.tanks) ? restoredState.tanks : [],
+      nozzles: Array.isArray(restoredState.nozzles) ? restoredState.nozzles : [],
+      shifts: Array.isArray(restoredState.shifts) ? restoredState.shifts : [],
+      transactions: Array.isArray(restoredState.transactions) ? restoredState.transactions : [],
+      nozzleClosings: Array.isArray(restoredState.nozzleClosings) ? restoredState.nozzleClosings : [],
+      reconciliations: Array.isArray(restoredState.reconciliations) ? restoredState.reconciliations : [],
+      calibrations: Array.isArray(restoredState.calibrations) ? restoredState.calibrations : [],
+      qualityAudits: Array.isArray(restoredState.qualityAudits) ? restoredState.qualityAudits : [],
+      lmc: Array.isArray(restoredState.lmc) ? restoredState.lmc : [],
+      appointments: Array.isArray(restoredState.appointments) ? restoredState.appointments : [],
+      systemCredentials: Array.isArray(restoredState.systemCredentials) ? restoredState.systemCredentials : [],
+      deliveries: Array.isArray(restoredState.deliveries) ? restoredState.deliveries : [],
+      audits: Array.isArray(restoredState.audits) ? restoredState.audits : [],
+      shortages: Array.isArray(restoredState.shortages) ? restoredState.shortages : [],
+      lubricantDeliveries: Array.isArray(restoredState.lubricantDeliveries) ? restoredState.lubricantDeliveries : [],
+      dailyBalances: Array.isArray(restoredState.dailyBalances) ? restoredState.dailyBalances : [],
+      supplyRequests: Array.isArray(restoredState.supplyRequests) ? restoredState.supplyRequests : [],
+      timesheetEntries: Array.isArray(restoredState.timesheetEntries) ? restoredState.timesheetEntries : [],
+      schedulePatterns: Array.isArray(restoredState.schedulePatterns) ? restoredState.schedulePatterns : [],
+      dashboardPreferences: restoredState.dashboardPreferences || appState.dashboardPreferences,
+      nomePosto: restoredState.nomePosto || appState.nomePosto,
+      securePassword: restoredState.securePassword || appState.securePassword,
+      reportHeaderLogo: restoredState.reportHeaderLogo || appState.reportHeaderLogo,
+      reportHeaderCompanyName: restoredState.reportHeaderCompanyName || appState.reportHeaderCompanyName,
+      reportHeaderCnpj: restoredState.reportHeaderCnpj || appState.reportHeaderCnpj,
+      reportHeaderAddress: restoredState.reportHeaderAddress || appState.reportHeaderAddress,
+      reportSignatureBase64: restoredState.reportSignatureBase64 || appState.reportSignatureBase64,
+      reportSignatureName: restoredState.reportSignatureName || appState.reportSignatureName,
+      reportSignatureRole: restoredState.reportSignatureRole || appState.reportSignatureRole,
+      reportSignatureEnabled: restoredState.reportSignatureEnabled !== undefined ? restoredState.reportSignatureEnabled : appState.reportSignatureEnabled,
     };
-    setAppState(mergedState);
+
+    // Keep the current logged in user and existing users if restored state has no users
+    const currentUsers = appState.users || [];
+    if (cleanRestored.users.length === 0) {
+      cleanRestored.users = currentUsers;
+    }
+
+    if (currentUser) {
+      const exists = cleanRestored.users.some(u => u.id === currentUser.id);
+      if (!exists) {
+        cleanRestored.users.push(currentUser);
+      }
+
+      // If the backup belongs to a specific CNPJ, ensure the current user inherits it to synchronize correctly
+      const targetCnpj = cleanRestored.reportHeaderCnpj || (cleanRestored as any).cnpjPosto || restoredState.reportHeaderCnpj || (restoredState as any).cnpjPosto;
+      if (targetCnpj && currentUser.cnpjPosto !== targetCnpj) {
+        console.log(`[Backup Restore] Alinhando CNPJ do usuário de ${currentUser.cnpjPosto} para ${targetCnpj}`);
+        const updatedUser = { ...currentUser, cnpjPosto: targetCnpj };
+        setCurrentUser(updatedUser);
+        localStorage.setItem("meu_posto_logged_user", JSON.stringify(updatedUser));
+        
+        // Ensure user record in the array is also updated
+        cleanRestored.users = cleanRestored.users.map(u => u.id === currentUser.id ? updatedUser : u);
+      }
+    }
+
+    setAppState(cleanRestored);
   };
 
   // Render AuthScreen if no user is signed in

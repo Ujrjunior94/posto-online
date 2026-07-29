@@ -227,6 +227,20 @@ export async function createExpressApp() {
     });
   });
 
+  // GET /api/firebase-config - dynamic firebase configuration for popups
+  app.get("/api/firebase-config", (req, res) => {
+    try {
+      const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+      if (fs.existsSync(configPath)) {
+        const data = fs.readFileSync(configPath, "utf-8");
+        return res.json(JSON.parse(data));
+      }
+      return res.status(404).json({ error: "Configuração do Firebase não encontrada no servidor." });
+    } catch (err: any) {
+      return res.status(500).json({ error: "Erro ao carregar configuração do Firebase.", details: err.message });
+    }
+  });
+
   // GET /api/backup?cnpj=...
   app.get("/api/backup", (req, res) => {
     try {
