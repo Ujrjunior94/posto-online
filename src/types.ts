@@ -173,6 +173,12 @@ export interface ANPQualityAudit {
   presencaImpurezas: boolean;
   conforme: boolean; // calculations/checks based on fuel specifications
   responsavelTecnico: string;
+  // Vínculo com Nota Fiscal (NF-e) e Distribuidora
+  numeroNotaFiscal?: string; // e.g. "NF-e 10542"
+  fornecedorNota?: string; // e.g. "Vibra Energia / Petrobras"
+  chaveAcessoNfe?: string; // Chave de acesso de 44 dígitos da NF-e
+  numeroLaudoFornecedor?: string; // Número do laudo fornecido pela base/refinaria
+  deliveryId?: string; // ID da entrega registrada no sistema
 }
 
 export interface SyncConfig {
@@ -253,6 +259,11 @@ export interface FuelDelivery {
   temperaturaMedida?: number;
   densidadeCorrigida?: number;
   conforme?: boolean;
+  // Vínculos com Laudo de Qualidade ANP e Distribuidora
+  qualityAuditId?: string; // ID do Laudo ANP gerado pelo posto
+  numeroLaudoFornecedor?: string; // Número do Laudo/Certificado de Análise do fornecedor/refinaria
+  fornecedor?: string; // Nome da distribuidora (Vibra, Ipiranga, Raízen, Shell, etc.)
+  chaveAcessoNfe?: string; // Chave de acesso de 44 dígitos
 }
 
 export interface LubricantProduct {

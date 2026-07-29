@@ -220,6 +220,7 @@ export default function ANPQualityControl({
 
   // Selection state for batch actions
   const [selectedCalibrations, setSelectedCalibrations] = useState<{ [key: string]: boolean }>({});
+  const [selectedQualityAudits, setSelectedQualityAudits] = useState<{ [key: string]: boolean }>({});
 
   // Nozzle calibration form state
   const [calNozzleId, setCalNozzleId] = useState("");
@@ -235,6 +236,19 @@ export default function ANPQualityControl({
   const [qAspecto, setQAspecto] = useState<"Límpido e Isento" | "Turvo" | "Com Impurezas">("Límpido e Isento");
   const [qImpurezas, setQImpurezas] = useState(false);
   const [qResponsavel, setQResponsavel] = useState("");
+
+  // Vínculo Nota Fiscal com Laudo ANP
+  const [qNumeroNotaFiscal, setQNumeroNotaFiscal] = useState("");
+  const [qFornecedorNota, setQFornecedorNota] = useState("");
+  const [qDeliveryId, setQDeliveryId] = useState("");
+  const [qNumeroLaudoFornecedor, setQNumeroLaudoFornecedor] = useState("");
+
+  // Modal para vincular Nota Fiscal a um Laudo já existente
+  const [linkingAuditModal, setLinkingAuditModal] = useState<ANPQualityAudit | null>(null);
+  const [linkModalNfe, setLinkModalNfe] = useState("");
+  const [linkModalFornecedor, setLinkModalFornecedor] = useState("");
+  const [linkModalDeliveryId, setLinkModalDeliveryId] = useState("");
+  const [linkModalLaudoFornecedor, setLinkModalLaudoFornecedor] = useState("");
 
   // ANP Specific Gravity / Mass Density Lookup Table state
   const [densitySearchTerm, setDensitySearchTerm] = useState("");
@@ -361,8 +375,9 @@ export default function ANPQualityControl({
       qImpurezas
     );
 
+    const newAuditId = "qa_" + Date.now();
     const newAudit: ANPQualityAudit = {
-      id: "qa_" + Date.now(),
+      id: newAuditId,
       data: new Date().toISOString().split("T")[0],
       combustivel: qCombustivel,
       densidade: Number(qDensidade),
@@ -373,9 +388,29 @@ export default function ANPQualityControl({
       presencaImpurezas: qImpurezas,
       conforme: comp.conforme,
       responsavelTecnico: qResponsavel || "Químico Técnico",
+      numeroNotaFiscal: qNumeroNotaFiscal.trim() || undefined,
+      fornecedorNota: qFornecedorNota.trim() || undefined,
+      deliveryId: qDeliveryId || undefined,
+      numeroLaudoFornecedor: qNumeroLaudoFornecedor.trim() || undefined,
     };
 
     onUpdateQualityAudits([...qualityAudits, newAudit]);
+
+    // Se vinculou uma entrega/carga cadastrada, vincular o ID do laudo na entrega
+    if (qDeliveryId && fuelDeliveries.length > 0) {
+      const updatedDeliveries = fuelDeliveries.map((del) => {
+        if (del.id === qDeliveryId) {
+          return {
+            ...del,
+            qualityAuditId: newAuditId,
+            fornecedor: qFornecedorNota.trim() || del.fornecedor,
+            nfe: qNumeroNotaFiscal.trim() || del.nfe || del.invoiceNumber,
+          };
+        }
+        return del;
+      });
+      onUpdateDeliveries(updatedDeliveries);
+    }
 
     if (comp.conforme) {
       onAddAuditLog(
@@ -1007,6 +1042,287 @@ export default function ANPQualityControl({
       ...prev,
       [id]: !prev[id],
     }));
+  };
+
+  // Selection handlers for Quality Audits (Laudos)
+  const handleSelectAllQualityAudits = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      const newSel: { [key: string]: boolean } = {};
+      qualityAudits.forEach((a) => {
+        newSel[a.id] = true;
+      });
+      setSelectedQualityAudits(newSel);
+    } else {
+      setSelectedQualityAudits({});
+    }
+  };
+
+  const handleToggleSelectQualityAudit = (id: string) => {
+    setSelectedQualityAudits((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  // Export selected Quality Audits to PDF
+  const handleExportSelectedQualityAuditsPDF = () => {
+    const selectedIds = Object.keys(selectedQualityAudits).filter((id) => selectedQualityAudits[id]);
+    if (selectedIds.length === 0) {
+      alert("Selecione ao menos um laudo na tabela abaixo para exportar.");
+      return;
+    }
+
+    const rowsToExport = qualityAudits.filter((a) => selectedIds.includes(a.id));
+    const doc = new jsPDF();
+    const emissionDate = `${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`;
+
+    const startX = 14;
+    const endX = 196;
+    const usableWidth = 182;
+
+    const reportCompName = (appState.reportHeaderCompanyName || appState.nomePosto || "MEU POSTO").toUpperCase();
+    const reportCnpj = appState.reportHeaderCnpj || cnpjPosto;
+    const reportAddress = appState.reportHeaderAddress || "";
+
+    doc.setDrawColor(79, 70, 229);
+    doc.setLineWidth(1);
+    doc.line(startX, 15, endX, 15);
+
+    let textX = startX;
+    if (appState.reportHeaderLogo) {
+      try {
+        doc.addImage(appState.reportHeaderLogo, "PNG", startX, 16.5, 12, 12);
+        textX = startX + 15;
+      } catch (e) {
+        console.error("Error drawing logo in PDF:", e);
+      }
+    }
+
+    doc.setTextColor(79, 70, 229);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text(reportCompName, textX, 21);
+
+    doc.setTextColor(75, 85, 99);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text(`RELATÓRIO DE LAUDOS SELECIONADOS • CNPJ: ${reportCnpj}`, textX, 26);
+    if (reportAddress) {
+      doc.setFontSize(6.5);
+      doc.text(reportAddress.length > 80 ? reportAddress.substring(0, 80) + "..." : reportAddress, textX, 30);
+    }
+
+    doc.setFontSize(8);
+    doc.setTextColor(75, 85, 99);
+    doc.text(`Emissão: ${emissionDate}`, endX, 24, { align: "right" });
+
+    doc.setDrawColor(79, 70, 229);
+    doc.setLineWidth(0.5);
+    doc.line(startX, 33, endX, 33);
+
+    // Title banner
+    doc.setFillColor(248, 250, 252);
+    doc.rect(14, 40, 182, 14, "F");
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(14, 40, 182, 14, "S");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`RELATÓRIO DE QUALIDADE E NOTAS FISCAIS (${rowsToExport.length} LAUDO(S) SELECIONADO(S))`, 18, 48);
+
+    // Table of selected quality audits
+    const tableData = rowsToExport.map((a) => {
+      const dt = a.data.split("-").reverse().join("/");
+      const fuel = a.combustivel;
+      const nfeStr = a.numeroNotaFiscal ? `${a.numeroNotaFiscal}${a.fornecedorNota ? ` - ${a.fornecedorNota}` : ""}` : "Sem Nota Vinculada";
+      const d20Str = a.densidadeCorrigida ? `${a.densidadeCorrigida.toFixed(4)} g/cm³` : `${a.densidade.toFixed(4)} g/cm³`;
+      const alcoholStr = a.teorEtanol !== undefined ? `${a.teorEtanol}%` : "-";
+      const statusStr = a.conforme ? "CONFORME" : "REPROVADO";
+
+      return [dt, fuel, nfeStr, d20Str, alcoholStr, statusStr, a.responsavelTecnico || "Técnico"];
+    });
+
+    autoTable(doc, {
+      startY: 60,
+      head: [["Data", "Combustível", "Nota Fiscal / Fornecedor", "Massa Esp. D20", "Teor", "Veredicto", "Responsável"]],
+      body: tableData,
+      headStyles: { fillColor: [79, 70, 229], fontSize: 8 },
+      styles: { fontSize: 7.5, cellPadding: 3 },
+      columnStyles: {
+        0: { halign: "center" },
+        1: { fontStyle: "bold" },
+        3: { fontStyle: "bold", halign: "right" },
+        4: { halign: "center" },
+        5: { halign: "center", fontStyle: "bold" },
+      },
+      didParseCell: function (data: any) {
+        if (data.row.section === "body" && data.column.index === 5) {
+          if (data.cell.text[0] === "CONFORME") {
+            data.cell.styles.textColor = [16, 185, 129];
+          } else if (data.cell.text[0] === "REPROVADO") {
+            data.cell.styles.textColor = [239, 68, 68];
+            data.cell.styles.fillColor = [254, 242, 242];
+          }
+        }
+      }
+    });
+
+    const finalY = (doc as any).lastAutoTable.finalY || 150;
+    const totalConformes = rowsToExport.filter((a) => a.conforme).length;
+    const totalReprovados = rowsToExport.length - totalConformes;
+
+    doc.setFontSize(9.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text(`RESUMO EXECUTIVO DA SELEÇÃO:`, 14, finalY + 10);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(`Total de Laudos Analisados: ${rowsToExport.length}`, 14, finalY + 16);
+    doc.text(`Aprovados / Conformes: ${totalConformes}`, 14, finalY + 21);
+    doc.text(`Reprovados / Fora do Padrão: ${totalReprovados}`, 14, finalY + 26);
+
+    const sigY = finalY + 45;
+    if (appState.reportSignatureEnabled !== false && appState.reportSignatureBase64) {
+      try {
+        const sigWidth = 40;
+        const sigHeight = 12;
+        const sigX = (usableWidth / 2 + startX) - (sigWidth / 2);
+        doc.addImage(appState.reportSignatureBase64, "PNG", sigX, sigY - 15, sigWidth, sigHeight);
+      } catch (e) {
+        console.error("Error adding signature image to PDF:", e);
+      }
+    }
+
+    doc.setDrawColor(200);
+    doc.setLineWidth(0.3);
+    doc.line(startX + 50, sigY, endX - 50, sigY);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(75, 85, 99);
+    const signerName = appState.reportSignatureName || "Carlos Eduardo de Oliveira";
+    doc.text(signerName, usableWidth / 2 + startX, sigY + 4, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    const signerRole = appState.reportSignatureRole || "Gerente Geral / Representante Legal";
+    doc.text(signerRole, usableWidth / 2 + startX, sigY + 8, { align: "center" });
+
+    doc.save(`relatorio_laudos_selecionados_${Date.now()}.pdf`);
+    onAddAuditLog("DOWNLOAD", "Qualidade", `Exportou PDF com ${rowsToExport.length} laudos selecionados`, "Regular");
+  };
+
+  // Export selected Quality Audits to CSV
+  const handleExportSelectedQualityAuditsCSV = () => {
+    const selectedIds = Object.keys(selectedQualityAudits).filter((id) => selectedQualityAudits[id]);
+    if (selectedIds.length === 0) {
+      alert("Selecione ao menos um laudo na tabela abaixo para exportar.");
+      return;
+    }
+
+    const rowsToExport = qualityAudits.filter((a) => selectedIds.includes(a.id));
+    const reportCompName = (appState.reportHeaderCompanyName || appState.nomePosto || "MEU POSTO").toUpperCase();
+    const reportCnpj = appState.reportHeaderCnpj || cnpjPosto;
+    const reportAddress = appState.reportHeaderAddress || "";
+    const emissionDate = `${new Date().toLocaleDateString("pt-BR")} ${new Date().toLocaleTimeString("pt-BR")}`;
+
+    let csvContent = "\ufeff"; // UTF-8 BOM
+    csvContent += `EMPRESA:;${reportCompName}\n`;
+    csvContent += `CNPJ:;${reportCnpj}\n`;
+    if (reportAddress) {
+      csvContent += `ENDEREÇO:;${reportAddress}\n`;
+    }
+    csvContent += `RELATÓRIO:;LAUDOS QUÍMICOS SELECIANADOS - EXPORTAÇÃO PLANILHA\n`;
+    csvContent += `EMISSÃO:;${emissionDate}\n\n`;
+
+    csvContent += "ID;Data;Combustivel;Nota Fiscal;Fornecedor;Densidade Medida (g/cm3);Temperatura (C);Densidade 20C (g/cm3);Teor Etanol (%);Aspecto Visual;Impurezas;Status;Responsavel\n";
+
+    rowsToExport.forEach((a) => {
+      const dt = a.data;
+      const fuel = a.combustivel;
+      const nfe = (a.numeroNotaFiscal || "-").replace(/;/g, ",");
+      const forn = (a.fornecedorNota || "-").replace(/;/g, ",");
+      const dens = a.densidade;
+      const temp = a.temperatura;
+      const d20 = a.densidadeCorrigida ? a.densidadeCorrigida.toFixed(4) : "";
+      const alcohol = a.teorEtanol !== undefined ? a.teorEtanol : "";
+      const aspecto = a.aspectoVisual;
+      const imp = a.presencaImpurezas ? "SIM" : "NÃO";
+      const status = a.conforme ? "CONFORME" : "REPROVADO";
+      const resp = (a.responsavelTecnico || "").replace(/;/g, ",");
+
+      csvContent += `${a.id};${dt};${fuel};${nfe};${forn};${dens};${temp};${d20};${alcohol};${aspecto};${imp};${status};${resp}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.setAttribute("href", url);
+    downloadLink.setAttribute("download", `laudos_selecionados_${Date.now()}.csv`);
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    URL.revokeObjectURL(url);
+
+    onAddAuditLog("DOWNLOAD", "Qualidade", `Exportou planilha com ${rowsToExport.length} laudos selecionados`, "Regular");
+  };
+
+  // Open invoice linking modal for an existing audit
+  const handleOpenLinkModal = (audit: ANPQualityAudit) => {
+    setLinkingAuditModal(audit);
+    setLinkModalNfe(audit.numeroNotaFiscal || "");
+    setLinkModalFornecedor(audit.fornecedorNota || "");
+    setLinkModalDeliveryId(audit.deliveryId || "");
+    setLinkModalLaudoFornecedor(audit.numeroLaudoFornecedor || "");
+  };
+
+  // Save linked invoice to audit
+  const handleSaveInvoiceLinkModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkingAuditModal) return;
+
+    const updatedAudits = qualityAudits.map((a) => {
+      if (a.id === linkingAuditModal.id) {
+        return {
+          ...a,
+          numeroNotaFiscal: linkModalNfe.trim() || undefined,
+          fornecedorNota: linkModalFornecedor.trim() || undefined,
+          deliveryId: linkModalDeliveryId || undefined,
+          numeroLaudoFornecedor: linkModalLaudoFornecedor.trim() || undefined,
+        };
+      }
+      return a;
+    });
+
+    onUpdateQualityAudits(updatedAudits);
+
+    // If a delivery was selected, update its qualityAuditId
+    if (linkModalDeliveryId && fuelDeliveries.length > 0) {
+      const updatedDeliveries = fuelDeliveries.map((del) => {
+        if (del.id === linkModalDeliveryId) {
+          return {
+            ...del,
+            qualityAuditId: linkingAuditModal.id,
+            fornecedor: linkModalFornecedor.trim() || del.fornecedor,
+            nfe: linkModalNfe.trim() || del.nfe || del.invoiceNumber,
+          };
+        }
+        return del;
+      });
+      onUpdateDeliveries(updatedDeliveries);
+    }
+
+    onAddAuditLog(
+      "UPDATE",
+      "Qualidade",
+      `Vinculou Nota Fiscal ${linkModalNfe || "N/A"} ao Laudo Químico ID ${linkingAuditModal.id}`,
+      "Regular"
+    );
+
+    setLinkingAuditModal(null);
+    setSuccess(`Nota Fiscal e Distribuidora vinculadas com sucesso ao Laudo Químico!`);
+    setTimeout(() => setSuccess(""), 4000);
   };
 
   const handleDeleteCalibration = (id: string) => {
@@ -2064,6 +2380,66 @@ export default function ANPQualityControl({
                 </div>
               )}
 
+              {/* Vínculo de Nota Fiscal / Carga */}
+              <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-2">
+                <label className="block text-[10px] font-bold text-indigo-900 uppercase flex items-center justify-between">
+                  <span>📄 Vincular Nota Fiscal / Entrega (NF-e)</span>
+                  <span className="text-[9px] font-normal text-indigo-600">Opcional</span>
+                </label>
+                
+                {fuelDeliveries.length > 0 && (
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Cargas Cadastradas no Sistema</label>
+                    <select
+                      value={qDeliveryId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setQDeliveryId(id);
+                        const del = fuelDeliveries.find((d) => d.id === id);
+                        if (del) {
+                          setQNumeroNotaFiscal(del.nfe || del.invoiceNumber || "");
+                          setQFornecedorNota(del.fornecedor || "");
+                          if (del.combustivel || del.fuelType) {
+                            setQCombustivel((del.combustivel || del.fuelType) as FuelType);
+                          }
+                        }
+                      }}
+                      className="w-full bg-white border border-indigo-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="">Selecione uma Carga Registrada (Auto-preencher)</option>
+                      {fuelDeliveries.map((del) => (
+                        <option key={del.id} value={del.id}>
+                          NF-e: {del.nfe || del.invoiceNumber || del.id} — {del.combustivel || del.fuelType} ({(del.volumeRecebido || del.volume || 0).toLocaleString("pt-BR")}L) — {del.data || del.date}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N° Nota Fiscal (NF-e)</label>
+                    <input
+                      type="text"
+                      value={qNumeroNotaFiscal}
+                      onChange={(e) => setQNumeroNotaFiscal(e.target.value)}
+                      placeholder="Ex: NF-e 10542"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Distribuidora / Refinaria</label>
+                    <input
+                      type="text"
+                      value={qFornecedorNota}
+                      onChange={(e) => setQFornecedorNota(e.target.value)}
+                      placeholder="Ex: Vibra / Petrobras"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Químico Responsável *</label>
                 <input
@@ -2116,7 +2492,9 @@ export default function ANPQualityControl({
                       aspectoVisual: qAspecto,
                       presencaImpurezas: qImpurezas,
                       conforme: comp.conforme,
-                      responsavelTecnico: qResponsavel || "Responsável Técnico (Rascunho)"
+                      responsavelTecnico: qResponsavel || "Responsável Técnico (Rascunho)",
+                      numeroNotaFiscal: qNumeroNotaFiscal || undefined,
+                      fornecedorNota: qFornecedorNota || undefined,
                     };
                     handleExportAuditPDF(draftAudit);
                   }}
@@ -2141,7 +2519,7 @@ export default function ANPQualityControl({
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Edite medições e recalcule a correção D20 (20°C) para laudos já salvos no sistema.
+                  Selecione laudos específicos para gerar relatórios consolidados em PDF/CSV ou vincule Notas Fiscais (NF-e).
                 </p>
               </div>
               {qualityAudits.length > 0 && (
@@ -2157,13 +2535,58 @@ export default function ANPQualityControl({
               )}
             </div>
 
+            {/* Sticky Action Bar for Selected Quality Audits */}
+            {Object.values(selectedQualityAudits).filter(Boolean).length > 0 && (
+              <div className="p-3 bg-indigo-900 text-white rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-in slide-in-from-top-2 duration-200">
+                <span className="text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  {Object.values(selectedQualityAudits).filter(Boolean).length} Laudo(s) Selecionado(s)
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleExportSelectedQualityAuditsPDF}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition"
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Gerar Relatório Selecionados (PDF)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportSelectedQualityAuditsCSV}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-xs cursor-pointer transition"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Planilha (CSV)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQualityAudits({})}
+                    className="px-2.5 py-1.5 bg-indigo-950 hover:bg-indigo-800 text-indigo-200 text-xs font-semibold rounded-lg transition cursor-pointer"
+                  >
+                    Limpar Seleção
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
                   <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        onChange={handleSelectAllQualityAudits}
+                        checked={qualityAudits.length > 0 && Object.keys(selectedQualityAudits).filter(k => selectedQualityAudits[k]).length === qualityAudits.length}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                        title="Selecionar todos os laudos"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Data</th>
                     <th className="py-2.5 px-3">Combustível</th>
-                    <th className="py-2.5 px-3">Metricas Medidas & D20</th>
+                    <th className="py-2.5 px-3">Nota Fiscal / Distribuidora</th>
+                    <th className="py-2.5 px-3">Métricas & D20</th>
                     <th className="py-2.5 px-3">Etanol</th>
                     <th className="py-2.5 px-3">Veredicto</th>
                     <th className="py-2.5 px-3">Resp. Técnico</th>
@@ -2173,75 +2596,117 @@ export default function ANPQualityControl({
                 <tbody>
                   {qualityAudits.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-500 italic">Nenhum laudo químico emitido hoje.</td>
+                      <td colSpan={9} className="py-8 text-center text-slate-500 italic">Nenhum laudo químico emitido no sistema.</td>
                     </tr>
                   ) : (
                     qualityAudits
                       .slice()
                       .reverse()
-                      .map((audit) => (
-                        <tr key={audit.id} className="border-b border-slate-100 hover:bg-slate-50/40">
-                          <td className="py-2.5 px-3 font-semibold text-slate-600">{audit.data.split("-").reverse().join("/")}</td>
-                          <td className="py-2.5 px-3 font-bold text-slate-800">{audit.combustivel}</td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
-                            <div>Medida: {audit.densidade.toFixed(4)} ({audit.temperatura}°C)</div>
-                            <div className="font-bold text-indigo-700 text-[10.5px]">
-                              D20: {audit.densidadeCorrigida ? audit.densidadeCorrigida.toFixed(4) : calculateD20(audit.densidade, audit.temperatura, audit.combustivel).toFixed(4)} g/cm³
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                            {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}% v/v` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% M/M` : "—"}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span
-                              className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
-                                audit.conforme
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                                  : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
-                              }`}
-                            >
-                              {audit.conforme ? "APROVADO" : "FORA DE PADRÃO"}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500">{audit.responsavelTecnico}</td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleRecalculateSingleAudit(audit)}
-                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                                title="Recalcular Correção D20 Instantaneamente"
+                      .map((audit) => {
+                        const isChecked = !!selectedQualityAudits[audit.id];
+                        return (
+                          <tr key={audit.id} className={`border-b border-slate-100 transition ${isChecked ? "bg-indigo-50/50" : "hover:bg-slate-50/40"}`}>
+                            <td className="py-2.5 px-3">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleSelectQualityAudit(audit.id)}
+                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-2.5 px-3 font-semibold text-slate-600">{audit.data.split("-").reverse().join("/")}</td>
+                            <td className="py-2.5 px-3 font-bold text-slate-800">{audit.combustivel}</td>
+                            <td className="py-2.5 px-3">
+                              {audit.numeroNotaFiscal ? (
+                                <div className="space-y-0.5">
+                                  <span className="inline-flex items-center gap-1 font-bold text-indigo-700 text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                                    📄 {audit.numeroNotaFiscal}
+                                  </span>
+                                  {audit.fornecedorNota && (
+                                    <div className="text-[10px] text-slate-500 font-medium">
+                                      🏢 {audit.fornecedorNota}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLinkModal(audit)}
+                                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1 cursor-pointer"
+                                  title="Clique para vincular uma Nota Fiscal a este Laudo"
+                                >
+                                  + Vincular NF-e
+                                </button>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700">
+                              <div>Medida: {audit.densidade.toFixed(4)} ({audit.temperatura}°C)</div>
+                              <div className="font-bold text-indigo-700 text-[10.5px]">
+                                D20: {audit.densidadeCorrigida ? audit.densidadeCorrigida.toFixed(4) : calculateD20(audit.densidade, audit.temperatura, audit.combustivel).toFixed(4)} g/cm³
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                              {audit.combustivel.includes("Gasolina") ? `${audit.teorEtanol}% v/v` : audit.combustivel === "Etanol" ? `${audit.teorEtanol}% M/M` : "—"}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 border rounded-full ${
+                                  audit.conforme
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                    : "bg-rose-50 text-rose-700 border-rose-100 animate-pulse"
+                                }`}
                               >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditAuditModal(audit)}
-                                className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
-                                title="Editar & Recalcular Medições do Laudo Salvo"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleExportAuditPDF(audit)}
-                                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                                title="Exportar Laudo em PDF"
-                              >
-                                <FileDown className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteQualityAudit(audit.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                title="Excluir Registro"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                                {audit.conforme ? "APROVADO" : "FORA DE PADRÃO"}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-500">{audit.responsavelTecnico}</td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenLinkModal(audit)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Vincular/Editar Nota Fiscal"
+                                >
+                                  📄
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecalculateSingleAudit(audit)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Recalcular Correção D20 Instantaneamente"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditAuditModal(audit)}
+                                  className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                  title="Editar & Recalcular Medições do Laudo Salvo"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleExportAuditPDF(audit)}
+                                  className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Exportar Laudo em PDF"
+                                >
+                                  <FileDown className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteQualityAudit(audit.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Excluir Registro"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -3588,6 +4053,118 @@ export default function ANPQualityControl({
         onClose={() => setShowANPTableModal(false)}
         initialFuel={qCombustivel}
       />
+
+      {/* Modal Vincular Nota Fiscal ao Laudo */}
+      {linkingAuditModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                📄 Vincular Nota Fiscal (NF-e) ao Laudo
+              </h3>
+              <button
+                type="button"
+                onClick={() => setLinkingAuditModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-600 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100 space-y-1">
+              <div><strong>Combustível:</strong> {linkingAuditModal.combustivel}</div>
+              <div><strong>Data do Teste:</strong> {linkingAuditModal.data.split("-").reverse().join("/")}</div>
+              <div><strong>D20:</strong> {linkingAuditModal.densidadeCorrigida ? linkingAuditModal.densidadeCorrigida.toFixed(4) : linkingAuditModal.densidade.toFixed(4)} g/cm³</div>
+            </div>
+
+            <form onSubmit={handleSaveInvoiceLinkModal} className="space-y-4">
+              {fuelDeliveries.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                    Selecionar Carga Cadastrada
+                  </label>
+                  <select
+                    value={linkModalDeliveryId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setLinkModalDeliveryId(id);
+                      const del = fuelDeliveries.find((d) => d.id === id);
+                      if (del) {
+                        setLinkModalNfe(del.nfe || del.invoiceNumber || "");
+                        setLinkModalFornecedor(del.fornecedor || "");
+                      }
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Selecione para vincular automaticamente</option>
+                    {fuelDeliveries.map((del) => (
+                      <option key={del.id} value={del.id}>
+                        NF-e: {del.nfe || del.invoiceNumber || del.id} — {del.combustivel || del.fuelType} ({(del.volumeRecebido || del.volume || 0).toLocaleString("pt-BR")}L)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Número da Nota Fiscal (NF-e) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={linkModalNfe}
+                  onChange={(e) => setLinkModalNfe(e.target.value)}
+                  placeholder="Ex: NF-e 10542"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  Distribuidora / Refinaria / Fornecedor
+                </label>
+                <input
+                  type="text"
+                  value={linkModalFornecedor}
+                  onChange={(e) => setLinkModalFornecedor(e.target.value)}
+                  placeholder="Ex: Vibra / Raízen / Ipiranga"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                  N° do Laudo de Qualidade do Fornecedor (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={linkModalLaudoFornecedor}
+                  onChange={(e) => setLinkModalLaudoFornecedor(e.target.value)}
+                  placeholder="Ex: L-88942-A"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setLinkingAuditModal(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
+                >
+                  Salvar Vínculo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -42,8 +42,10 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
-  Move
+  Move,
+  Bot
 } from "lucide-react";
+import { StationManagerSVG } from "./AnimatedStationManager";
 
 interface DashboardOverviewProps {
   appState: AppState;
@@ -289,6 +291,58 @@ export default function DashboardOverview({ appState, onNavigate, onUpdatePrefer
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* CARD CENTRAL DO GERENTE MARCOS (GERENTE DO POSTO DE PELE ESCURA) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 rounded-2xl p-4 sm:p-5 text-white shadow-xl border border-emerald-500/30 relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10">
+          {/* Animated SVG Avatar */}
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-slate-950 p-1 border-2 border-emerald-500/40 shadow-2xl relative shrink-0">
+            <StationManagerSVG
+              expression="happy"
+              isBlinking={false}
+              isSpeaking={false}
+              isWaving={true}
+            />
+            <span className="absolute -bottom-1 -right-1 bg-emerald-500 border-2 border-slate-900 w-4 h-4 rounded-full"></span>
+          </div>
+
+          <div className="flex-1 text-center sm:text-left space-y-1.5">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+              <h3 className="font-extrabold text-base sm:text-lg text-white">
+                Gerente Marcos • Gerente do Posto
+              </h3>
+              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                Assistente de Pista
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed max-w-xl">
+              "Olá! Acompanho em tempo real os estoques de combustível, o fechamento dos bicos e as pendências da ANP para manter seu posto 100% lucrativo e regularizado."
+            </p>
+
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+              <button
+                onClick={() => {
+                  const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+                  window.dispatchEvent(event);
+                }}
+                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl transition shadow-md flex items-center gap-1.5 cursor-pointer"
+              >
+                <Bot className="w-4 h-4" />
+                Conversar com Gerente Marcos
+              </button>
+
+              <button
+                onClick={() => onNavigate("tanques")}
+                className="px-3 py-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+              >
+                <Fuel className="w-3.5 h-3.5 text-amber-400" />
+                Ver Tanques ({tanks.length})
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ import TimesheetManagement from "./components/TimesheetManagement";
 import { UserAvatar } from "./components/UserAvatar";
 import WelcomeOnboarding from "./components/WelcomeOnboarding";
 import PWAModal from "./components/PWAModal";
+import { AnimatedStationManager } from "./components/AnimatedStationManager";
 import { getPendingFormsCountSW, triggerOfflineFormsSync } from "./lib/offlineSync";
 
 import {
@@ -63,6 +64,7 @@ import {
   Copy,
   CheckCircle2,
   Trash2,
+  Bot,
 } from "lucide-react";
 
 const STORAGE_KEY = "meu_posto_app_state";
@@ -454,6 +456,14 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  const hasLoadedFromCloudRef = useRef<boolean>(false);
+  const [syncToastMessage, setSyncToastMessage] = useState<string>("");
+
+  useEffect(() => {
+    // Reset cloud load tracking whenever logged-in user or station changes
+    hasLoadedFromCloudRef.current = false;
+  }, [currentUser?.id, currentUser?.cnpjPosto]);
+
   // Sync Firestore AppState in real-time when currentUser is loaded
   useEffect(() => {
     if (!currentUser) return;
@@ -462,6 +472,7 @@ export default function App() {
     
     setLoadingState(true);
     const docRef = doc(db, "postos", cleanCnpj);
+    const userAppStateRef = doc(db, "users_appstate", currentUser.id);
 
     // Subscribe to real-time changes
     const unsubscribe = onSnapshot(
@@ -474,25 +485,49 @@ export default function App() {
             const cloudData = docSnap.data() as AppState;
             const localUpdatedAt = appStateRef.current.updatedAt || 0;
             const cloudUpdatedAt = cloudData.updatedAt || 0;
-            if (cloudUpdatedAt > localUpdatedAt || !appStateRef.current.updatedAt) {
+
+            // On initial login on ANY device, OR if cloud has newer/equal data, force load from cloud database!
+            if (!hasLoadedFromCloudRef.current || cloudUpdatedAt >= localUpdatedAt || !appStateRef.current.updatedAt) {
+              hasLoadedFromCloudRef.current = true;
               setAppStateInternal(cloudData);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(cloudData));
+
+              const nowIso = new Date().toISOString();
+              setSyncConfig((prev) => ({
+                ...prev,
+                lastCloudSyncDate: nowIso,
+              }));
+
+              const totalRecords = (cloudData.dailyBalances?.length || 0) + (cloudData.qualityAudits?.length || 0) + (cloudData.shifts?.length || 0) + (cloudData.transactions?.length || 0);
+              setSyncToastMessage(`☁️ Dados do banco resgatados com sucesso neste dispositivo! (${totalRecords} registros recuperados)`);
+              setTimeout(() => setSyncToastMessage(""), 6000);
             }
-            const nowIso = new Date().toISOString();
-            setSyncConfig((prev) => ({
-              ...prev,
-              lastCloudSyncDate: nowIso,
-            }));
           }
         } else {
-          // Create initial document in Firestore
+          // Check if user has a backup at users_appstate/{uid}
           try {
-            await setDoc(docRef, appStateRef.current);
-            const nowIso = new Date().toISOString();
-            setSyncConfig((prev) => ({
-              ...prev,
-              lastCloudSyncDate: nowIso,
-              lastBackupDate: nowIso,
-            }));
+            const userSnap = await getDoc(userAppStateRef);
+            if (userSnap.exists()) {
+              const userCloudData = userSnap.data() as AppState;
+              hasLoadedFromCloudRef.current = true;
+              setAppStateInternal(userCloudData);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(userCloudData));
+              await setDoc(docRef, userCloudData);
+
+              setSyncToastMessage("☁️ Estado do usuário resgatado com sucesso da nuvem!");
+              setTimeout(() => setSyncToastMessage(""), 6000);
+            } else {
+              // Create initial document in Firestore
+              await setDoc(docRef, appStateRef.current);
+              await setDoc(userAppStateRef, appStateRef.current);
+              hasLoadedFromCloudRef.current = true;
+              const nowIso = new Date().toISOString();
+              setSyncConfig((prev) => ({
+                ...prev,
+                lastCloudSyncDate: nowIso,
+                lastBackupDate: nowIso,
+              }));
+            }
           } catch (err) {
             console.error("Erro ao inicializar documento do posto no Firestore:", err);
           }
@@ -505,7 +540,7 @@ export default function App() {
     );
 
     return () => unsubscribe();
-  }, [currentUser?.cnpjPosto]);
+  }, [currentUser?.id, currentUser?.cnpjPosto]);
 
   // Auto-persist AppState to localStorage and debounced setDoc to Firestore
   useEffect(() => {
@@ -518,9 +553,15 @@ export default function App() {
     const saveToFirestore = async () => {
       try {
         const docRef = doc(db, "postos", cleanCnpj);
-        console.log(`[Firestore Save Trigger] Iniciando gravação do appState atualizado. CNPJ: ${cleanCnpj}, Total de Balanços: ${appState.dailyBalances?.length || 0}`);
-        await setDoc(docRef, appState);
+        const userAppStateRef = doc(db, "users_appstate", currentUser.id);
+
+        console.log(`[Firestore Save Trigger] Gravando appState atualizado no Firestore (Posto: ${cleanCnpj}, User: ${currentUser.id}).`);
+        await Promise.all([
+          setDoc(docRef, appState),
+          setDoc(userAppStateRef, appState)
+        ]);
         console.log(`[Firestore Save Success] Gravação concluída com sucesso no Firestore.`);
+
         const nowIso = new Date().toISOString();
         setSyncConfig((prev) => ({
           ...prev,
@@ -537,7 +578,7 @@ export default function App() {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [appState, currentUser?.cnpjPosto]);
+  }, [appState, currentUser?.id, currentUser?.cnpjPosto]);
 
   // Auto-persist SyncConfig
   useEffect(() => {
@@ -1082,7 +1123,25 @@ export default function App() {
       )}
 
       {/* 3. MAIN CONTAINER */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        
+        {/* Toast Notificação de Sincronização em Nuvem por Login */}
+        {syncToastMessage && (
+          <div className="fixed top-4 right-4 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/50 flex items-center gap-3 animate-in fade-in slide-in-from-top-3 duration-300 max-w-md">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl shrink-0">
+              <Cloud className="h-5 w-5" />
+            </div>
+            <div className="flex-1 text-xs font-semibold leading-tight">
+              {syncToastMessage}
+            </div>
+            <button
+              onClick={() => setSyncToastMessage("")}
+              className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         
         {/* Top Header Principal */}
         <header className="bg-white/90 backdrop-blur-xs border-b border-slate-200/80 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-2xs">
@@ -1197,6 +1256,19 @@ export default function App() {
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">PWA</span>
+            </button>
+
+            {/* Gerente Marcos Button in Header */}
+            <button
+              onClick={() => {
+                const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+                window.dispatchEvent(event);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs rounded-full transition shadow-xs cursor-pointer"
+              title="Abrir Gerente Virtual Marcos"
+            >
+              <Bot className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+              <span className="hidden sm:inline">Gerente Marcos</span>
             </button>
 
             {/* Limpar Dados Button in Top Header */}
@@ -1691,6 +1763,12 @@ export default function App() {
         onClose={() => setIsPwaModalOpen(false)}
         deferredPrompt={deferredPrompt}
         onInstall={handleInstallPWA}
+      />
+
+      {/* 7. GERENTE VIRTUAL DO POSTO (BONECO ANIMADO PELE ESCURA - MARCOS) */}
+      <AnimatedStationManager
+        appState={appState}
+        onNavigateTab={(tab) => setActiveTab(tab)}
       />
     </div>
   );

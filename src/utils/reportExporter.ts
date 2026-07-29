@@ -220,7 +220,7 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
 
       // Quality Audits
       csvContent += `--- CONTROLE DA QUALIDADE DE COMBUSTÍVEIS (PROVETAS & DENSIDADE) ---\n`;
-      csvContent += `DATA;COMBUSTÍVEL;DENSIDADE (g/cm³);TEMPERATURA (°C);DENSIDADE 20°C;TEOR DE ETANOL (%);RESPONSÁVEL TÉCNICO;STATUS\n`;
+      csvContent += `DATA;COMBUSTÍVEL;NOTA FISCAL (NF-E);DISTRIBUIDORA / FORNECEDOR;DENSIDADE (g/cm³);TEMPERATURA (°C);DENSIDADE 20°C;TEOR DE ETANOL (%);RESPONSÁVEL TÉCNICO;STATUS\n`;
 
       const filteredQuality = qualityAudits.filter((item) => {
         const itemDate = item.data ? item.data.substring(0, 10) : "";
@@ -231,6 +231,8 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
         filteredQuality.forEach((q) => {
           const dt = formatDateBR(q.data);
           const fuel = q.combustivel || "Gasolina Comum";
+          const nfe = (q.numeroNotaFiscal || "-").replace(/;/g, ",");
+          const forn = (q.fornecedorNota || "-").replace(/;/g, ",");
           const dens = Number(q.densidade) || 0.742;
           const temp = Number(q.temperatura) || 24.5;
           const d20 = q.densidadeCorrigida ? q.densidadeCorrigida.toFixed(4).replace(".", ",") : "-";
@@ -238,11 +240,11 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
           const resp = (q.responsavelTecnico || "Técnico de Pista").replace(/;/g, ",");
           const status = q.conforme ? "CONFORME" : "NÃO CONFORME";
 
-          csvContent += `${dt};${fuel};${dens.toFixed(4).replace(".", ",")};${temp.toFixed(1).replace(".", ",")} °C;${d20};${alcohol};${resp};${status}\n`;
+          csvContent += `${dt};${fuel};${nfe};${forn};${dens.toFixed(4).replace(".", ",")};${temp.toFixed(1).replace(".", ",")} °C;${d20};${alcohol};${resp};${status}\n`;
         });
         csvContent += `\n`;
       } else {
-        csvContent += `-;Nenhum teste de qualidade de combustível no período;-;-;-;-;-;-\n\n`;
+        csvContent += `-;Nenhum teste de qualidade de combustível no período;-;-;-;-;-;-;-;-\n\n`;
       }
     }
 
@@ -769,6 +771,64 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
           5: { halign: "center", fontStyle: "bold" },
         },
         styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240] },
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+
+      if (currentY > 210) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text("LAUDOS TÉCNICOS E CONTROLE QUALITATIVO DE PROVETAS (ANP)", startX, currentY);
+      currentY += 3;
+
+      const filteredQuality = qualityAudits.filter((q) => {
+        const qDate = q.data ? q.data.substring(0, 10) : "";
+        return qDate >= startDate && qDate <= endDate;
+      });
+
+      const qualityRows = filteredQuality.map((q) => {
+        const dt = formatDateBR(q.data);
+        const fuel = q.combustivel || "Gasolina Comum";
+        const nfeStr = q.numeroNotaFiscal ? `${q.numeroNotaFiscal}${q.fornecedorNota ? ` (${q.fornecedorNota})` : ""}` : "-";
+        const d20Str = q.densidadeCorrigida ? `${q.densidadeCorrigida.toFixed(4)} g/cm³` : `${q.densidade.toFixed(4)} g/cm³`;
+        const alcoholStr = q.teorEtanol !== undefined ? `${q.teorEtanol}%` : "-";
+        const statusStr = q.conforme ? "CONFORME" : "REPROVADO";
+
+        return [dt, fuel, nfeStr, d20Str, alcoholStr, q.responsavelTecnico || "Técnico", statusStr];
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Data", "Combustível", "Nota Fiscal / Fornecedor", "Massa Esp. D20", "Teor Etanol", "Responsável", "Veredicto"]],
+        body: qualityRows.length > 0 ? qualityRows : [["-", "Sem laudos químicos no período", "-", "-", "-", "-", "-"]],
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: "bold" },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left", fontStyle: "bold" },
+          2: { halign: "left" },
+          3: { halign: "right", fontStyle: "bold" },
+          4: { halign: "center" },
+          5: { halign: "left" },
+          6: { halign: "center", fontStyle: "bold" },
+        },
+        styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 6) {
+            if (data.cell.text[0] === "CONFORME") {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else if (data.cell.text[0] === "REPROVADO") {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fillColor = [254, 242, 242];
+            }
+          }
+        }
       });
 
       currentY = (doc as any).lastAutoTable.finalY + 8;
