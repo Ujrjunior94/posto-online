@@ -7,7 +7,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AppState, FuelTank, CashTransaction, LmcRecord, NozzleCalibration, ANPQualityAudit, ShiftSchedule } from "../types";
 
-export type ReportType = "financial" | "lmc" | "anp" | "litrage" | "consolidated" | "deliveries" | "dre" | "afericao";
+export type ReportType = "financial" | "lmc" | "anp" | "litrage" | "consolidated" | "deliveries" | "dre" | "afericao" | "daily_balances" | "audits";
 
 export interface ExportReportOptions {
   appState: AppState;
@@ -15,6 +15,8 @@ export interface ExportReportOptions {
   selectedTypes?: ReportType[];
   startDate: string;
   endDate: string;
+  returnBlob?: boolean;
+  returnString?: boolean;
 }
 
 // Helper to format currency in Brazilian Real
@@ -128,11 +130,11 @@ export function computeLitersMetrics(appState: AppState, startDate: string, endD
  * Generates and downloads a clean, beautifully formatted CSV file for Excel/Sheets.
  * Includes UTF-8 BOM, clear section headers, aligned columns, totals, and electronic signature block.
  */
-export function exportReportCSV({ appState, reportType, selectedTypes, startDate, endDate }: ExportReportOptions) {
+export function exportReportCSV({ appState, reportType, selectedTypes, startDate, endDate, returnBlob, returnString }: ExportReportOptions) {
   try {
     const activeTypes: ReportType[] = (selectedTypes && selectedTypes.length > 0)
       ? selectedTypes
-      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao"] : [reportType]);
+      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao", "daily_balances", "audits"] : [reportType]);
 
     const periodText = `${formatDateBR(startDate)} a ${formatDateBR(endDate)}`;
     const emissionDate = new Date().toLocaleString("pt-BR");
@@ -474,6 +476,81 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
       csvContent += `Margem Média por Litro;${formatBRL(m.averageMarginPerLiter)} / L;-\n\n`;
     }
 
+    if (activeTypes.includes("daily_balances")) {
+      csvContent += `--- FECHAMENTO FINANCEIRO E BALANÇO DIÁRIO ---\n`;
+      csvContent += `DATA;FECHADO POR;VENDAS COMBUSTÍVEL (R$);VENDAS LUBRIFICANTES (R$);OUTRAS RECEITAS (R$);TOTAL DESPESAS (R$);SALDO OPERACIONAL (R$);DINHEIRO (R$);CARTÃO CRÉDITO (R$);CARTÃO DÉBITO (R$);PIX (R$);A PRAZO (R$);OBSERVAÇÕES\n`;
+
+      const filteredBalances = (appState.dailyBalances || []).filter((b) => {
+        const bDate = b.data ? b.data.substring(0, 10) : "";
+        return bDate >= startDate && bDate <= endDate;
+      });
+
+      if (filteredBalances.length > 0) {
+        let totalComb = 0;
+        let totalLub = 0;
+        let totalOutros = 0;
+        let totalDesp = 0;
+        let totalSld = 0;
+
+        filteredBalances.forEach((b) => {
+          const dt = formatDateBR(b.data);
+          const closedBy = (b.fechadoPor || "Não Informado").replace(/;/g, ",");
+          const comb = b.vendaCombustivel || 0;
+          const lub = b.vendaLubrificantes || 0;
+          const outros = b.outrasReceitas || 0;
+          const desp = b.totalDespesas || 0;
+          const sld = b.saldoFinal || 0;
+          const din = b.metodosPagamento?.dinheiro || 0;
+          const cred = b.metodosPagamento?.cartaoCredito || 0;
+          const deb = b.metodosPagamento?.cartaoDebito || 0;
+          const pix = b.metodosPagamento?.pix || 0;
+          const prazo = b.metodosPagamento?.prazo || 0;
+          const obs = (b.observacoes || "").replace(/;/g, ",").replace(/\n/g, " ");
+
+          totalComb += comb;
+          totalLub += lub;
+          totalOutros += outros;
+          totalDesp += desp;
+          totalSld += sld;
+
+          csvContent += `${dt};${closedBy};${formatBRL(comb)};${formatBRL(lub)};${formatBRL(outros)};${formatBRL(desp)};${formatBRL(sld)};${formatBRL(din)};${formatBRL(cred)};${formatBRL(deb)};${formatBRL(pix)};${formatBRL(prazo)};${obs}\n`;
+        });
+
+        csvContent += `----------------------------------------------------------------------------------------------------\n`;
+        csvContent += `TOTAL CONSOLIDADO;;${formatBRL(totalComb)};${formatBRL(totalLub)};${formatBRL(totalOutros)};${formatBRL(totalDesp)};${formatBRL(totalSld)};;;;;;\n\n`;
+      } else {
+        csvContent += `-;Nenhum fechamento de balanço diário registrado no período;-;-;-;-;-;-;-;-;-;-;-\n\n`;
+      }
+    }
+
+    if (activeTypes.includes("audits")) {
+      csvContent += `--- HISTÓRICO DE AUDITORIA E CONFORMIDADE ---\n`;
+      csvContent += `DATA;HORA;CATEGORIA DE AÇÃO;ALVO;DETALHES DA OPERAÇÃO;OPERADOR;STATUS CONFORMIDADE\n`;
+
+      const filteredAudits = (appState.audits || []).filter((aud) => {
+        const audDate = aud.date ? aud.date.substring(0, 10) : "";
+        return audDate >= startDate && audDate <= endDate;
+      });
+
+      if (filteredAudits.length > 0) {
+        filteredAudits.forEach((aud) => {
+          const dt = formatDateBR(aud.date);
+          const hr = aud.time || "-";
+          const cat = (aud.actionType || "INFO").replace(/;/g, ",");
+          const target = (aud.target || "-").replace(/;/g, ",");
+          const details = (aud.details || "").replace(/;/g, ",").replace(/\n/g, " ");
+          const op = (aud.operator || "Sistema").replace(/;/g, ",");
+          const status = (aud.complianceStatus || "Regular").replace(/;/g, ",");
+
+          csvContent += `${dt};${hr};${cat};${target};${details};${op};${status}\n`;
+        });
+        csvContent += `----------------------------------------------------------------------------------------------------\n`;
+        csvContent += `TOTAL DE REGISTROS: ${filteredAudits.length};;;;;;\n\n`;
+      } else {
+        csvContent += `-;Nenhum registro de auditoria encontrado no período;-;-;-;-;-\n\n`;
+      }
+    }
+
     // Signature Block
     if (appState.reportSignatureEnabled !== false) {
       const signerName = appState.reportSignatureName || "Carlos Eduardo de Oliveira";
@@ -488,6 +565,12 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
 
     // Download trigger
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    if (returnString) {
+      return csvContent;
+    }
+    if (returnBlob) {
+      return blob;
+    }
     const url = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
     const sanitizedTitle = activeTypes.length > 1
@@ -507,11 +590,11 @@ export function exportReportCSV({ appState, reportType, selectedTypes, startDate
 /**
  * Generates and downloads a high quality PDF report using jsPDF and jspdf-autotable.
  */
-export function exportReportPDF({ appState, reportType, selectedTypes, startDate, endDate }: ExportReportOptions) {
+export function exportReportPDF({ appState, reportType, selectedTypes, startDate, endDate, returnBlob }: ExportReportOptions) {
   try {
     const activeTypes: ReportType[] = (selectedTypes && selectedTypes.length > 0)
       ? selectedTypes
-      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao"] : [reportType]);
+      : (reportType === "consolidated" ? ["dre", "financial", "lmc", "anp", "litrage", "deliveries", "afericao", "daily_balances", "audits"] : [reportType]);
 
     const doc = new jsPDF("p", "mm", "a4");
     const periodText = `${formatDateBR(startDate)} a ${formatDateBR(endDate)}`;
@@ -1204,6 +1287,133 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
       currentY = (doc as any).lastAutoTable.finalY + 8;
     }
 
+    if (activeTypes.includes("daily_balances")) {
+      if (currentY > 200) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text("REGISTROS DE FECHAMENTO FINANCEIRO E BALANÇO DIÁRIO", startX, currentY);
+      currentY += 3;
+
+      const filteredBalances = (appState.dailyBalances || []).filter((b) => {
+        const bDate = b.data ? b.data.substring(0, 10) : "";
+        return bDate >= startDate && bDate <= endDate;
+      });
+
+      const balanceRows = filteredBalances.map((b) => {
+        const comb = b.vendaCombustivel || 0;
+        const lub = b.vendaLubrificantes || 0;
+        const outros = b.outrasReceitas || 0;
+        const desp = b.totalDespesas || 0;
+        const sld = b.saldoFinal || 0;
+
+        return [
+          formatDateBR(b.data),
+          b.fechadoPor || "Gerente",
+          formatBRL(comb),
+          formatBRL(lub),
+          formatBRL(outros),
+          `(-) ${formatBRL(desp)}`,
+          formatBRL(sld)
+        ];
+      });
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Data", "Fechado Por", "Venda Comb.", "Venda Lubr.", "Outras Rec.", "Total Desp.", "Saldo Líquido"]],
+        body: balanceRows.length > 0 ? balanceRows : [["-", "Sem registros de balanço diário no período", "-", "-", "-", "-", "-"]],
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: "bold" },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left" },
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "right", textColor: [220, 38, 38] },
+          6: { halign: "right", fontStyle: "bold" },
+        },
+        styles: { fontSize: 7, cellPadding: 2, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 6) {
+            const val = data.cell.text[0] || "";
+            if (val.includes("-")) {
+              data.cell.styles.textColor = [220, 38, 38];
+            } else if (val !== "R$ 0,00" && val !== "-") {
+              data.cell.styles.textColor = [22, 163, 74];
+            }
+          }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    if (activeTypes.includes("audits")) {
+      if (currentY > 200) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text("LIVRO E HISTÓRICO DE AUDITORIA DE CONFORMIDADE", startX, currentY);
+      currentY += 3;
+
+      const filteredAudits = (appState.audits || []).filter((aud) => {
+        const audDate = aud.date ? aud.date.substring(0, 10) : "";
+        return audDate >= startDate && audDate <= endDate;
+      });
+
+      const auditRows = filteredAudits.map((aud) => [
+        formatDateBR(aud.date),
+        aud.time || "-",
+        aud.actionType || "INFO",
+        aud.target || "-",
+        aud.details || "",
+        aud.operator || "Sistema",
+        aud.complianceStatus || "Regular"
+      ]);
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["Data", "Hora", "Ação", "Módulo/Alvo", "Detalhes da Operação", "Operador", "Conformidade"]],
+        body: auditRows.length > 0 ? auditRows : [["-", "-", "Sem registros de auditoria no período", "-", "-", "-", "-"]],
+        theme: "grid",
+        margin: { left: startX, right: 12 },
+        headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontSize: 7.5, fontStyle: "bold" },
+        columnStyles: {
+          0: { halign: "center", cellWidth: 15 },
+          1: { halign: "center", cellWidth: 12 },
+          2: { halign: "center", fontStyle: "bold", cellWidth: 18 },
+          3: { halign: "left", cellWidth: 20 },
+          4: { halign: "left", cellWidth: 70 },
+          5: { halign: "left", cellWidth: 25 },
+          6: { halign: "center", cellWidth: 20 },
+        },
+        styles: { fontSize: 6.5, cellPadding: 1.5, lineColor: [226, 232, 240] },
+        didParseCell: function (data: any) {
+          if (data.row.section === "body" && data.column.index === 6) {
+            const status = data.cell.text[0] || "";
+            if (status.toLowerCase().includes("atípico") || status.toLowerCase().includes("crítico") || status.toLowerCase().includes("reprovado") || status.toLowerCase().includes("limpeza")) {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fillColor = [254, 242, 242];
+            } else {
+              data.cell.styles.textColor = [22, 163, 74];
+            }
+          }
+        }
+      });
+
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
+
     // Page numbering and Signature
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
@@ -1245,6 +1455,9 @@ export function exportReportPDF({ appState, reportType, selectedTypes, startDate
     const sanitizedTitle = isMulti
       ? `Prestacao_Contas_Mensal_${activeTypes.length}_Relatorios`
       : `Relatorio_${getReportTitle(reportType).replace(/\s+/g, "_")}`;
+    if (returnBlob) {
+      return doc.output("blob");
+    }
     doc.save(`${sanitizedTitle}_MeuPosto_${startDate}_${endDate}.pdf`);
   } catch (err: any) {
     alert("Erro ao gerar PDF do relatório: " + err.message);
@@ -1267,6 +1480,10 @@ function getReportTitle(type: ReportType): string {
       return "Relatório de Combustíveis Descarregados (Entregas e Recebimento NF-e)";
     case "dre":
       return "Demonstrativo do Resultado do Exercicio DRE Mensal";
+    case "daily_balances":
+      return "Relatório de Balanços Diários e Caixa Consolidado";
+    case "audits":
+      return "Livro de Auditoria e Histórico de Conformidade";
     case "consolidated":
       return "Relatório Gerencial Consolidado do Posto";
     default:

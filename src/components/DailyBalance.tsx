@@ -51,6 +51,8 @@ import {
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import ReportPreviewModal from "./ReportPreviewModal";
+import { exportReportPDF, exportReportCSV } from "../utils/reportExporter";
+import { logAnalyticsEvent } from "../lib/firebase";
 
 interface DailyBalanceProps {
   appState: AppState;
@@ -120,6 +122,47 @@ export default function DailyBalance({
   const [filterPeriod, setFilterPeriod] = useState<"daily" | "monthly">("daily");
   const [filterDate, setFilterDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [filterMonth, setFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
+
+  // Analytics and Exporter triggers
+  React.useEffect(() => {
+    logAnalyticsEvent("navigation_module", {
+      module: "DailyBalance",
+      view: view,
+      timestamp: new Date().toISOString()
+    });
+  }, [view]);
+
+  const handleExportDailyBalancesPDF = () => {
+    let start = filterDate;
+    let end = filterDate;
+    if (filterPeriod === "monthly") {
+      start = `${filterMonth}-01`;
+      end = `${filterMonth}-31`;
+    }
+    exportReportPDF({
+      appState,
+      reportType: "daily_balances",
+      startDate: start,
+      endDate: end
+    });
+    logAnalyticsEvent("export_report", { type: "daily_balances", format: "pdf", period: filterPeriod });
+  };
+
+  const handleExportDailyBalancesCSV = () => {
+    let start = filterDate;
+    let end = filterDate;
+    if (filterPeriod === "monthly") {
+      start = `${filterMonth}-01`;
+      end = `${filterMonth}-31`;
+    }
+    exportReportCSV({
+      appState,
+      reportType: "daily_balances",
+      startDate: start,
+      endDate: end
+    });
+    logAnalyticsEvent("export_report", { type: "daily_balances", format: "csv", period: filterPeriod });
+  };
 
   // Edit trackers
   const [editingBalanceId, setEditingBalanceId] = useState<string | null>(null);
@@ -676,6 +719,7 @@ export default function DailyBalance({
       const updated = dailyBalances.filter((b) => b.id !== id);
       onUpdateBalances(updated);
       onAddAuditLog("DELETE", "Balanço Financeiro", `Excluiu lançamento do balanço ID ${id}`, "Regular");
+      logAnalyticsEvent("clear_data", { type: "financial_balance", id: id });
       setSuccess("Lançamento excluído com sucesso.");
       setTimeout(() => setSuccess(""), 3000);
     }
@@ -739,6 +783,7 @@ export default function DailyBalance({
       const updated = lmc.filter((r) => r.id !== id);
       if (onUpdateLmc) onUpdateLmc(updated);
       onAddAuditLog("DELETE", "LMC Volumétrico", `Excluiu registro LMC ID ${id}`, "Regular");
+      logAnalyticsEvent("clear_data", { type: "lmc_volumetric", id: id });
       setSuccess("Lançamento volumétrico excluído.");
       setTimeout(() => setSuccess(""), 3000);
     }
@@ -1255,10 +1300,22 @@ export default function DailyBalance({
             
             <div className="flex-1" />
             
-            <button className="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-indigo-600 transition text-[10px] font-black uppercase tracking-widest cursor-pointer">
-              <Download className="h-4 w-4" />
-              Exportar PDF
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleExportDailyBalancesPDF}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-xl transition text-[10px] font-black uppercase tracking-widest cursor-pointer"
+              >
+                <Download className="h-4 w-4 text-slate-500 hover:text-indigo-600" />
+                Exportar PDF
+              </button>
+              <button 
+                onClick={handleExportDailyBalancesCSV}
+                className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl transition text-[10px] font-black uppercase tracking-widest cursor-pointer shadow-xs"
+              >
+                <Download className="h-4 w-4 text-white" />
+                Exportar CSV
+              </button>
+            </div>
           </div>
 
           {/* Stats Grid */}

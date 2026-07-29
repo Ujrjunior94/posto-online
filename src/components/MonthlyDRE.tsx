@@ -15,7 +15,8 @@ import {
   TrendingUp,
   Award,
   AlertTriangle,
-  CheckSquare
+  CheckSquare,
+  Bot
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -136,9 +137,23 @@ export default function MonthlyDRE({ appState }: MonthlyDREProps) {
             Demonstrativo de fluxo físico e volume de vendas em litros para o período de {currentMonthName} de {currentYear}.
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold">
-          <Calendar className="h-4 w-4" />
-          <span className="capitalize">{currentMonthName} {currentYear}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+            <Calendar className="h-4 w-4" />
+            <span className="capitalize">{currentMonthName} {currentYear}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+              window.dispatchEvent(event);
+            }}
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 border border-amber-500/30 text-amber-600 font-black text-xs rounded-lg transition cursor-pointer shadow-xs active:scale-95"
+            title="Falar com o Gerente Virtual Marcos"
+          >
+            <Bot className="h-4 w-4 text-amber-500 animate-pulse" />
+            <span>Gerente AI</span>
+          </button>
         </div>
       </div>
 

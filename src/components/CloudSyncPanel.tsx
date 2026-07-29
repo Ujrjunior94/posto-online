@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { AppState, SyncConfig, SystemCredential, User } from "../types";
 import SubTabNavigation from "./SubTabNavigation";
-import { db, doc, setDoc, getDoc } from "../lib/firebase";
+import { db, doc, setDoc, getDoc, auth, linkGoogleAccount } from "../lib/firebase";
 import { UserAvatar, PRESET_AVATAR_ICONS } from "./UserAvatar";
 import {
   Cloud,
@@ -405,6 +405,70 @@ export default function CloudSyncPanel({
     setTimeout(() => setProfileSuccessMsg(false), 3500);
   };
 
+  const [isLinkingGoogle, setIsLinkingGoogle] = useState(false);
+
+  const handleLinkGoogle = async () => {
+    setIsLinkingGoogle(true);
+    try {
+      const { email, displayName } = await linkGoogleAccount();
+      
+      const updatedUser: User = {
+        ...currentUser,
+        isGoogleLinked: true,
+        googleEmail: email,
+        googleDisplayName: displayName,
+      };
+
+      onUpdateCurrentUser(updatedUser);
+      onAddAuditLog(
+        "UPDATE",
+        "Perfil",
+        `Vinculou conta Google (${email}) ao usuário ${currentUser.nomeCompleto}`,
+        "Regular"
+      );
+
+      alert(`✅ Conta Google vinculada com sucesso!\n\nAgora você pode usar seu Google Drive para backups e restaurar seus dados a qualquer momento.`);
+    } catch (error: any) {
+      console.error("Link Google Error:", error);
+      alert(`Erro ao vincular conta Google: ${error.message || "Por favor, tente novamente."}`);
+    } finally {
+      setIsLinkingGoogle(false);
+    }
+  };
+
+  const handleUnlinkGoogle = async () => {
+    if (!confirm("Tem certeza de que deseja desvincular sua conta Google? O backup automático e restauração rápida via nuvem Google serão desativados.")) {
+      return;
+    }
+    
+    try {
+      const authUser = auth.currentUser;
+      if (authUser) {
+        const { unlink, GoogleAuthProvider } = await import("firebase/auth");
+        await unlink(authUser, GoogleAuthProvider.PROVIDER_ID).catch((e) => console.warn("Unlink error in Auth:", e));
+      }
+
+      const updatedUser: User = {
+        ...currentUser,
+        isGoogleLinked: false,
+        googleEmail: undefined,
+        googleDisplayName: undefined,
+      };
+
+      onUpdateCurrentUser(updatedUser);
+      onAddAuditLog(
+        "UPDATE",
+        "Perfil",
+        `Desvinculou conta Google do usuário ${currentUser.nomeCompleto}`,
+        "Regular"
+      );
+
+      alert("Conta Google desvinculada com sucesso.");
+    } catch (error: any) {
+      alert(`Erro ao desvincular conta Google: ${error.message}`);
+    }
+  };
+
   const tempUserPreview: User = {
     ...currentUser,
     nomeCompleto: profileName || currentUser?.nomeCompleto || "Usuário",
@@ -464,6 +528,79 @@ export default function CloudSyncPanel({
     type: null,
     message: "",
   });
+
+  const [googleDriveFolderId, setGoogleDriveFolderId] = useState(syncConfig.googleDriveFolderId || "");
+  const [driveFoldersList, setDriveFoldersList] = useState<{ id: string; name: string }[]>([]);
+  const [isLoadingFolders, setIsLoadingFolders] = useState(false);
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderInput, setNewFolderInput] = useState("");
+
+  const handleFetchDriveFolders = useCallback(async () => {
+    if (!googleDriveTokens) return;
+    setIsLoadingFolders(true);
+    try {
+      const res = await fetch("/api/drive/list-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tokens: googleDriveTokens }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDriveFoldersList(data.folders || []);
+      } else {
+        throw new Error(data.error || "Não foi possível carregar as pastas.");
+      }
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setIsLoadingFolders(false);
+    }
+  }, [googleDriveTokens]);
+
+  const handleCreateDriveFolder = async () => {
+    if (!googleDriveTokens) return;
+    if (!newFolderInput.trim()) {
+      alert("Digite um nome válido para a pasta.");
+      return;
+    }
+    setIsCreatingFolder(true);
+    try {
+      const res = await fetch("/api/drive/create-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tokens: googleDriveTokens,
+          folderName: newFolderInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGoogleDriveFolderId(data.folderId);
+        setGoogleDriveFolderName(data.folderName);
+        setNewFolderInput("");
+        setSyncStatus({
+          type: "success",
+          message: `Pasta "${data.folderName}" criada e selecionada com sucesso!`,
+        });
+        setTimeout(() => setSyncStatus({ type: null, message: "" }), 3000);
+        // Refresh folders list
+        handleFetchDriveFolders();
+      } else {
+        throw new Error(data.error || "Não foi possível criar a pasta.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao criar pasta no Google Drive: " + err.message);
+    } finally {
+      setIsCreatingFolder(false);
+    }
+  };
+
+  useEffect(() => {
+    if (googleDriveTokens) {
+      handleFetchDriveFolders();
+    }
+  }, [googleDriveTokens, handleFetchDriveFolders]);
 
   // Modal forms
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
@@ -814,6 +951,7 @@ export default function CloudSyncPanel({
       autoDownloadLocalJson,
       googleDriveBackupEnabled,
       googleDriveFolderName,
+      googleDriveFolderId,
       googleDriveTokens,
       lastBackupDate: syncConfig.lastBackupDate || new Date().toISOString(),
     };
@@ -870,6 +1008,7 @@ export default function CloudSyncPanel({
         body: JSON.stringify({
           tokens: googleDriveTokens,
           folderName: googleDriveFolderName || "Backups_MeuPosto",
+          folderId: googleDriveFolderId || undefined,
           cnpj: cnpjPosto,
           backupData: appState,
           filename: filename,
@@ -887,9 +1026,17 @@ export default function CloudSyncPanel({
         ...syncConfig,
         googleDriveBackupEnabled,
         googleDriveFolderName,
+        googleDriveFolderId: data.folderId || googleDriveFolderId,
         lastGoogleDriveBackupDate: nowIso,
         lastGoogleDriveFileLink: data.webViewLink,
       };
+      // Synchronize input fields with whatever was created or located
+      if (data.folderId) {
+        setGoogleDriveFolderId(data.folderId);
+      }
+      if (data.folderName) {
+        setGoogleDriveFolderName(data.folderName);
+      }
       onUpdateConfig(updated);
 
       onAddAuditLog(
@@ -1401,6 +1548,52 @@ export default function CloudSyncPanel({
                     placeholder="(11) 98765-4321"
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                   />
+                </div>
+
+                {/* Google Account Linking Section */}
+                <div className="pt-3 pb-2 border-t border-slate-200/60 space-y-2">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Vinculação para Backup (Conta Google)
+                  </label>
+                  {currentUser.isGoogleLinked ? (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-bold">
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>Google Vinculado</span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 font-medium space-y-0.5">
+                        <p className="truncate"><strong>Nome:</strong> {currentUser.googleDisplayName || "N/D"}</p>
+                        <p className="truncate"><strong>E-mail:</strong> {currentUser.googleEmail || "N/D"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleUnlinkGoogle}
+                        className="w-full mt-1.5 py-1.5 px-3 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 font-bold text-[10px] rounded-lg transition flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <span>Desvincular Conta Google</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                        Vincule sua conta Gmail para habilitar a restauração automática de backup a qualquer momento.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLinkGoogle}
+                        disabled={isLinkingGoogle}
+                        className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                      >
+                        <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
+                          <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.6 14.8 1 12 1 7.4 1 3.5 3.6 1.5 7.4l3.8 3C6.2 7.6 8.9 5 12 5z" />
+                          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.1-2 3.7-4.9 3.7-8.7z" />
+                          <path fill="#FBBC05" d="M5.3 14.3c-.2-.6-.3-1.3-.3-2c0-.7.1-1.4.3-2L1.5 7.4C.5 9.3 0 11.4 0 13.7s.5 4.4 1.5 6.3l3.8-3z" />
+                          <path fill="#34A853" d="M12 23c3.2 0 6-1 8-2.9l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.1 0-5.8-2.6-6.7-5.4L1.5 16C3.5 19.8 7.4 23 12 23z" />
+                        </svg>
+                        <span>{isLinkingGoogle ? "Vinculando..." : "Vincular Conta Google"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-2">
@@ -2028,25 +2221,111 @@ export default function CloudSyncPanel({
                 </div>
 
                 <div>
-                  <label className="block text-[9.5px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Nome da Pasta no Google Drive
-                  </label>
-                  <input
-                    type="text"
-                    value={googleDriveFolderName}
-                    onChange={(e) => setGoogleDriveFolderName(e.target.value)}
-                    placeholder="Ex: Backups_MeuPosto"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                  />
+                  {/* Folder Selector and Creation Block */}
+                  <div className="space-y-3 bg-white p-3 rounded-xl border border-indigo-100/80 shadow-xs mb-3">
+                    <div className="flex items-center justify-between border-b border-indigo-50 pb-1.5 mb-1.5">
+                      <span className="text-[10px] font-extrabold text-indigo-950 uppercase tracking-wider">
+                        Pasta de Destino no Google Drive
+                      </span>
+                      <button
+                        type="button"
+                        disabled={isLoadingFolders}
+                        onClick={handleFetchDriveFolders}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                      >
+                        {isLoadingFolders ? (
+                          <span className="h-2.5 w-2.5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 7.89M9 11l3-3 3 3" />
+                          </svg>
+                        )}
+                        <span>Recarregar Pastas</span>
+                      </button>
+                    </div>
+
+                    {/* Dropdown folder selector */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        Selecione uma pasta ativa no seu Drive:
+                      </label>
+                      <select
+                        value={googleDriveFolderId}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          setGoogleDriveFolderId(selectedId);
+                          const folderObj = driveFoldersList.find(f => f.id === selectedId);
+                          if (folderObj) {
+                            setGoogleDriveFolderName(folderObj.name);
+                          } else {
+                            setGoogleDriveFolderName("");
+                          }
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
+                      >
+                        <option value="">-- Usar nome/padrão ("Backups_MeuPosto") --</option>
+                        {driveFoldersList.map((folder) => (
+                          <option key={folder.id} value={folder.id}>
+                            📁 {folder.name}
+                          </option>
+                        ))}
+                      </select>
+                      {googleDriveFolderName ? (
+                        <p className="text-[10px] text-emerald-700 font-bold mt-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 flex items-center gap-1">
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>Pasta Ativa: {googleDriveFolderName} (ID: {googleDriveFolderId ? googleDriveFolderId.slice(0, 8) + "..." : "Criada Manual"})</span>
+                        </p>
+                      ) : (
+                        <div className="mt-1">
+                          <label className="block text-[9.5px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                            Nome da Pasta Padrão
+                          </label>
+                          <input
+                            type="text"
+                            value={googleDriveFolderName}
+                            onChange={(e) => setGoogleDriveFolderName(e.target.value)}
+                            placeholder="Ex: Backups_MeuPosto"
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Manual new folder creation option */}
+                    <div className="border-t border-slate-100 pt-2 mt-2 space-y-1.5">
+                      <label className="block text-[10px] font-bold text-slate-500">
+                        Ou crie uma nova pasta de backup específica:
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newFolderInput}
+                          onChange={(e) => setNewFolderInput(e.target.value)}
+                          placeholder="Ex: Backups_MeuPosto_Historico"
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 font-medium focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCreateDriveFolder}
+                          disabled={isCreatingFolder || !newFolderInput.trim()}
+                          className="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-bold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer disabled:opacity-40"
+                        >
+                          {isCreatingFolder ? "Criando..." : "Criar Pasta"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <button
                   type="button"
                   onClick={handleManualGoogleDriveUpload}
                   disabled={isUploadingDrive}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50"
                 >
-                  <Cloud className="h-3.5 w-3.5" />
+                  <Cloud className="h-3.5 w-3.5 animate-pulse" />
                   <span>{isUploadingDrive ? "Enviando para o Drive..." : "Enviar Backup para o Google Drive Agora"}</span>
                 </button>
 

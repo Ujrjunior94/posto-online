@@ -30,7 +30,8 @@ import {
   Filter,
   UserX,
   BellRing,
-  Bell
+  Bell,
+  Bot
 } from "lucide-react";
 import { notifyCashierShortage, getNotificationPermission, requestBrowserNotificationPermission } from "../lib/notifications";
 
@@ -346,6 +347,19 @@ export default function CashierShortage({
           >
             <Bell className="h-3.5 w-3.5 text-amber-600" />
             <span className="hidden sm:inline">Alertas do Navegador</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+              window.dispatchEvent(event);
+            }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 border border-amber-500/30 text-amber-600 font-black text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-95 shrink-0"
+            title="Falar com o Gerente Virtual Marcos"
+          >
+            <Bot className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+            <span>Gerente AI</span>
           </button>
 
           {!isReadOnly && (

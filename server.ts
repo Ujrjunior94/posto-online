@@ -368,10 +368,82 @@ export async function createExpressApp() {
     }
   });
 
+  // POST /api/drive/list-folders - Lista pastas disponíveis no Google Drive do usuário
+  app.post("/api/drive/list-folders", async (req, res) => {
+    try {
+      const { tokens } = req.body;
+      if (!tokens || (!tokens.access_token && !tokens.refresh_token)) {
+        return res.status(401).json({ error: "Tokens do Google Drive ausentes." });
+      }
+
+      const oauth2Client = getOAuth2Client(req);
+      oauth2Client.setCredentials(tokens);
+
+      const drive = google.drive({ version: "v3", auth: oauth2Client });
+      const response = await drive.files.list({
+        q: "mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields: "files(id, name, webViewLink)",
+        spaces: "drive",
+        pageSize: 100,
+        orderBy: "name",
+      });
+
+      return res.json({
+        success: true,
+        folders: response.data.files || [],
+      });
+    } catch (error: any) {
+      console.error("Erro ao listar pastas do Google Drive:", error);
+      return res.status(500).json({
+        error: "Falha ao recuperar pastas do Google Drive.",
+        details: error.message,
+      });
+    }
+  });
+
+  // POST /api/drive/create-folder - Cria uma nova pasta específica no Google Drive
+  app.post("/api/drive/create-folder", async (req, res) => {
+    try {
+      const { tokens, folderName } = req.body;
+      if (!tokens || (!tokens.access_token && !tokens.refresh_token)) {
+        return res.status(401).json({ error: "Tokens do Google Drive ausentes." });
+      }
+      if (!folderName || !folderName.trim()) {
+        return res.status(400).json({ error: "O nome da pasta é obrigatório." });
+      }
+
+      const oauth2Client = getOAuth2Client(req);
+      oauth2Client.setCredentials(tokens);
+
+      const drive = google.drive({ version: "v3", auth: oauth2Client });
+      const folderMetadata = {
+        name: folderName.trim(),
+        mimeType: "application/vnd.google-apps.folder",
+      };
+      const createdFolder = await drive.files.create({
+        requestBody: folderMetadata,
+        fields: "id, name, webViewLink",
+      });
+
+      return res.json({
+        success: true,
+        folderId: createdFolder.data.id,
+        folderName: createdFolder.data.name,
+        webViewLink: createdFolder.data.webViewLink,
+      });
+    } catch (error: any) {
+      console.error("Erro ao criar pasta no Google Drive:", error);
+      return res.status(500).json({
+        error: "Falha ao criar pasta no Google Drive.",
+        details: error.message,
+      });
+    }
+  });
+
   // POST /api/drive/upload-backup - Upload de arquivo JSON para pasta no Google Drive
   app.post("/api/drive/upload-backup", async (req, res) => {
     try {
-      const { tokens, folderName = "Backups_MeuPosto", cnpj = "posto_geral", backupData, filename } = req.body;
+      const { tokens, folderName = "Backups_MeuPosto", folderId: reqFolderId, cnpj = "posto_geral", backupData, filename } = req.body;
 
       if (!tokens || (!tokens.access_token && !tokens.refresh_token)) {
         return res.status(401).json({ error: "Tokens do Google Drive ausentes. Conecte sua conta do Google Drive nas configurações de backup." });
@@ -386,27 +458,33 @@ export async function createExpressApp() {
 
       const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-      // 1. Localizar ou criar a pasta de backup especificada
-      const targetFolderName = (folderName || "Backups_MeuPosto").trim();
-      const folderSearchRes = await drive.files.list({
-        q: `name = '${targetFolderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-        fields: "files(id, name, webViewLink)",
-        spaces: "drive",
-      });
+      // 1. Localizar ou usar a pasta de backup especificada
+      let folderId = reqFolderId;
+      let targetFolderName = folderName;
 
-      let folderId = "";
-      if (folderSearchRes.data.files && folderSearchRes.data.files.length > 0) {
-        folderId = folderSearchRes.data.files[0].id!;
-      } else {
-        const folderMetadata = {
-          name: targetFolderName,
-          mimeType: "application/vnd.google-apps.folder",
-        };
-        const createdFolder = await drive.files.create({
-          requestBody: folderMetadata,
-          fields: "id",
+      if (!folderId) {
+        const cleanFolderName = (folderName || "Backups_MeuPosto").trim();
+        const folderSearchRes = await drive.files.list({
+          q: `name = '${cleanFolderName.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+          fields: "files(id, name, webViewLink)",
+          spaces: "drive",
         });
-        folderId = createdFolder.data.id!;
+
+        if (folderSearchRes.data.files && folderSearchRes.data.files.length > 0) {
+          folderId = folderSearchRes.data.files[0].id!;
+          targetFolderName = folderSearchRes.data.files[0].name!;
+        } else {
+          const folderMetadata = {
+            name: cleanFolderName,
+            mimeType: "application/vnd.google-apps.folder",
+          };
+          const createdFolder = await drive.files.create({
+            requestBody: folderMetadata,
+            fields: "id, name",
+          });
+          folderId = createdFolder.data.id!;
+          targetFolderName = createdFolder.data.name!;
+        }
       }
 
       // 2. Criar e fazer upload do arquivo JSON

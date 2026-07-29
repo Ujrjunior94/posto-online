@@ -16,6 +16,9 @@ export interface User {
   telefone: string;
   avatarUrl?: string;
   avatarIcon?: string;
+  isGoogleLinked?: boolean;
+  googleEmail?: string;
+  googleDisplayName?: string;
 }
 
 export type FuelType = "Gasolina Comum" | "Gasolina Aditivada" | "Gasolina Premium" | "Etanol" | "Diesel S10" | "Diesel S500";
@@ -195,6 +198,7 @@ export interface SyncConfig {
   autoDownloadLocalJson?: boolean;
   googleDriveBackupEnabled?: boolean;
   googleDriveFolderName?: string;
+  googleDriveFolderId?: string;
   googleDriveTokens?: {
     access_token?: string;
     refresh_token?: string;

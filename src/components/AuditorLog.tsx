@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import SubTabNavigation from "./SubTabNavigation";
 import { AppState, ActivityLog } from "../types";
-import { History, Trash2, Search, Calendar, Filter, Sparkles } from "lucide-react";
+import { History, Trash2, Search, Calendar, Filter, Sparkles, Download } from "lucide-react";
+import { exportReportPDF, exportReportCSV } from "../utils/reportExporter";
+import { logAnalyticsEvent } from "../lib/firebase";
 
 interface AuditorLogProps {
   appState: AppState;
@@ -24,10 +26,44 @@ export default function AuditorLog({ appState, cnpjPosto, onUpdateAudits, onClea
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // Analytics and Exporter triggers
+  useEffect(() => {
+    logAnalyticsEvent("navigation_module", {
+      module: "AuditorLog",
+      timestamp: new Date().toISOString()
+    });
+  }, []);
+
+  const handleExportAuditsPDF = () => {
+    const start = startDate || "2000-01-01";
+    const end = endDate || new Date().toISOString().split("T")[0];
+    exportReportPDF({
+      appState,
+      reportType: "audits",
+      startDate: start,
+      endDate: end
+    });
+    logAnalyticsEvent("export_report", { type: "audits", format: "pdf", filtered: !!startDate || !!endDate });
+  };
+
+  const handleExportAuditsCSV = () => {
+    const start = startDate || "2000-01-01";
+    const end = endDate || new Date().toISOString().split("T")[0];
+    exportReportCSV({
+      appState,
+      reportType: "audits",
+      startDate: start,
+      endDate: end
+    });
+    logAnalyticsEvent("export_report", { type: "audits", format: "csv", filtered: !!startDate || !!endDate });
+  };
+
   const handleClearLogs = () => {
     if (onClearData) {
+      logAnalyticsEvent("clear_data", { type: "audits_log" });
       onClearData();
     } else if (confirm("Tem certeza que deseja apagar todo o livro de auditoria do posto? Esta ação é irreversível.")) {
+      logAnalyticsEvent("clear_data", { type: "audits_log" });
       onUpdateAudits([]);
     }
   };
@@ -63,15 +99,35 @@ export default function AuditorLog({ appState, cnpjPosto, onUpdateAudits, onClea
           }
         ]}
         rightElement={
-          <button
-            type="button"
-            onClick={handleClearLogs}
-            disabled={filteredLogs.length === 0}
-            className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-            <span>Limpar Logs</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportAuditsPDF}
+              disabled={filteredLogs.length === 0}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5 text-slate-500" />
+              <span>Exportar PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleExportAuditsCSV}
+              disabled={filteredLogs.length === 0}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-xs"
+            >
+              <Download className="h-3.5 w-3.5 text-white" />
+              <span>Exportar CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleClearLogs}
+              disabled={filteredLogs.length === 0}
+              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+              <span>Limpar Logs</span>
+            </button>
+          </div>
         }
       />
 

@@ -707,16 +707,17 @@ export default function ShiftsChecklists({
 
     if (aiImportModalData.validationReport?.matrixStats && !aiImportModalData.validationReport.matrixStats.isComplete) {
       const stats = aiImportModalData.validationReport.matrixStats;
-      alert(
-        `❌ GRAVAÇÃO CANCELADA — IMPORTAÇÃO INCOMPLETA\n\n` +
+      if (!confirm(
+        `⚠️ IMPORTAÇÃO INCOMPLETA DETECTADA\n\n` +
         `• Dias encontrados: ${stats.diasEncontrados}\n` +
         `• Funcionários encontrados: ${stats.funcionariosEncontrados}\n` +
         `• Registros esperados: ${stats.registrosEsperados}\n` +
         `• Registros importados: ${stats.registrosImportados}\n\n` +
         `Status: ${stats.statusText}\n\n` +
-        `A gravação foi interrompida para evitar dados parciais. Verifique a imagem ou planilha e reenvie a escala completa.`
-      );
-      return;
+        `Deseja prosseguir com a gravação dos dados parciais mesmo assim?`
+      )) {
+        return;
+      }
     }
 
     const { recognizedUsers, schedules, events } = aiImportModalData;
@@ -894,7 +895,7 @@ export default function ShiftsChecklists({
     }
 
     // Execute validation checks on the constructed shifts list
-    const validationReport = validateScheduleEntries(newShifts, updatedUsersList, activeMonth.year, activeMonth.monthNum);
+    const validationReport = validateScheduleEntries(newShifts, updatedUsersList, activeMonth.year, activeMonth.monthNum, activeMonth.days);
     if (validationReport.errors.length > 0) {
       if (!confirm(`⚠️ AVISO DE CONFLITO NA VALIDAÇÃO:\n\n${validationReport.errors.slice(0, 5).join("\n")}\n\nDeseja ignorar os conflitos e prosseguir mesmo assim?`)) {
         return;

@@ -114,6 +114,7 @@
         
         statusEl.innerText = "Aguardando seleção de conta Google...";
         const provider = new GoogleAuthProvider();
+        provider.addScope("https://www.googleapis.com/auth/drive.file");
         provider.setCustomParameters({ prompt: "select_account" });
 
         const result = await signInWithPopup(auth, provider);
@@ -129,6 +130,7 @@
           window.opener.postMessage({
             type: "GOOGLE_AUTH_SUCCESS",
             idToken: credential.idToken,
+            accessToken: credential.accessToken,
             uid: result.user.uid,
             email: result.user.email,
             displayName: result.user.displayName,

@@ -1,4 +1,5 @@
 import React from "react";
+import { Bot } from "lucide-react";
 
 export interface SubTabOption<T extends string = string> {
   id: T;
@@ -87,6 +88,19 @@ export function SubTabNavigation<T extends string = string>({
         </div>
 
         {rightElement && <div className="flex items-center gap-2">{rightElement}</div>}
+
+        <button
+          type="button"
+          onClick={() => {
+            const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+            window.dispatchEvent(event);
+          }}
+          className="flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 border border-amber-500/30 text-amber-300 font-black text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+          title="Falar com o Gerente Virtual Marcos"
+        >
+          <Bot className="h-4 w-4 text-amber-400 animate-pulse" />
+          <span>Gerente AI</span>
+        </button>
       </div>
     </div>
   );

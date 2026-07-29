@@ -668,6 +668,7 @@ export default function App() {
             body: JSON.stringify({
               tokens: syncConfig.googleDriveTokens,
               folderName: syncConfig.googleDriveFolderName || "Backups_MeuPosto",
+              folderId: syncConfig.googleDriveFolderId || undefined,
               cnpj: currentUser?.cnpjPosto || "12.345.678/0001-99",
               backupData: appState,
             }),
@@ -923,7 +924,11 @@ export default function App() {
       reportSignatureName: restoredState.reportSignatureName || appState.reportSignatureName,
       reportSignatureRole: restoredState.reportSignatureRole || appState.reportSignatureRole,
       reportSignatureEnabled: restoredState.reportSignatureEnabled !== undefined ? restoredState.reportSignatureEnabled : appState.reportSignatureEnabled,
+      updatedAt: Date.now(),
     };
+
+    // Prevent race conditions and immediate reverts by the Firestore subscription
+    hasLoadedFromCloudRef.current = true;
 
     // Keep the current logged in user and existing users if restored state has no users
     const currentUsers = appState.users || [];

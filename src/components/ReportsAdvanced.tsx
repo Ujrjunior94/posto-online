@@ -5,9 +5,11 @@
 
 import React, { useState } from "react";
 import { AppState, FuelTank } from "../types";
-import { FileText, Calendar, TrendingUp, DollarSign, Download, Printer, AlertTriangle, CheckSquare, Square, Sparkles, Eye, Layers, ShieldCheck, Droplet, BarChart3, Truck, Calculator } from "lucide-react";
+import { FileText, Calendar, TrendingUp, DollarSign, Download, Printer, AlertTriangle, CheckSquare, Square, Sparkles, Eye, Layers, ShieldCheck, Droplet, BarChart3, Truck, Calculator, Bot } from "lucide-react";
 import ReportPreviewModal from "./ReportPreviewModal";
 import { exportReportPDF, exportReportCSV, ReportType } from "../utils/reportExporter";
+import { auth, getAccessToken, safeSignInWithGoogle } from "../lib/firebase";
+import { uploadFileToGoogleDrive } from "../utils/googleDrive";
 
 interface ReportsAdvancedProps {
   appState: AppState;
@@ -45,6 +47,78 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().split("T")[0]);
   const [isTechnicalCalibrationsExpanded, setIsTechnicalCalibrationsExpanded] = useState(false);
+
+  // States and handler for saving reports to Google Drive
+  const [isSavingToDrive, setIsSavingToDrive] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<{ type: "success" | "error"; message: string; link?: string } | null>(null);
+
+  const handleSaveToGoogleDrive = async (format: "pdf" | "csv") => {
+    setIsSavingToDrive(true);
+    setDriveStatus(null);
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        // Trigger Google Sign-In popup with required Drive scope
+        await safeSignInWithGoogle();
+        token = await getAccessToken();
+        if (!token) {
+          throw new Error("Não foi possível obter autorização do Google Drive. Permita popups no navegador.");
+        }
+      }
+
+      const activeTypes: ReportType[] = selectedMultiReports.length > 0 ? selectedMultiReports : ["dre", "financial", "lmc", "anp"];
+      const sanitizedTitle = activeTypes.length > 1
+        ? `Prestacao_Contas_Mensal_${activeTypes.length}_Relatorios`
+        : `Relatorio_Gerencial`;
+      
+      const filename = `${sanitizedTitle}_MeuPosto_${startDate}_${endDate}.${format}`;
+      const mimeType = format === "pdf" ? "application/pdf" : "text/csv";
+
+      let blob: Blob;
+      if (format === "pdf") {
+        blob = exportReportPDF({
+          appState,
+          reportType: "consolidated",
+          selectedTypes: activeTypes,
+          startDate,
+          endDate,
+          returnBlob: true,
+        }) as unknown as Blob;
+      } else {
+        blob = exportReportCSV({
+          appState,
+          reportType: "consolidated",
+          selectedTypes: activeTypes,
+          startDate,
+          endDate,
+          returnBlob: true,
+        }) as unknown as Blob;
+      }
+
+      if (!blob) {
+        throw new Error("Falha ao compilar os dados do relatório.");
+      }
+
+      const uploadResult = await uploadFileToGoogleDrive(filename, mimeType, blob);
+      if (uploadResult.success) {
+        setDriveStatus({
+          type: "success",
+          message: "Relatório salvo com sucesso no seu Google Drive!",
+          link: uploadResult.webViewLink
+        });
+      } else {
+        throw new Error(uploadResult.error || "Erro ao transferir arquivo para o Google Drive.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setDriveStatus({
+        type: "error",
+        message: err.message || "Erro inesperado ao salvar no Google Drive."
+      });
+    } finally {
+      setIsSavingToDrive(false);
+    }
+  };
 
   // Filter transactions in range
   const filteredTxs = transactions.filter((tx) => {
@@ -381,6 +455,19 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
               className="bg-transparent border-none text-slate-800 focus:outline-none font-semibold font-mono"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+              window.dispatchEvent(event);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 border border-amber-500/30 text-amber-600 font-black text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-95 shrink-0 animate-in fade-in"
+            title="Falar com o Gerente Virtual Marcos"
+          >
+            <Bot className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+            <span>Gerente AI</span>
+          </button>
         </div>
       </div>
 
@@ -804,6 +891,75 @@ export default function ReportsAdvanced({ appState, onUpdateReportCustomization 
                 <Eye className="h-4 w-4 text-indigo-200" />
                 Preview
               </button>
+            </div>
+
+            {/* Google Drive Integration Action Row */}
+            <div className="border-t border-indigo-150/50 pt-3 mt-1 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                  <svg className="h-4 w-4 text-emerald-600 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+                  </svg>
+                  Salvar na Nuvem (Google Drive)
+                </span>
+                {auth.currentUser?.email && (
+                  <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                    {auth.currentUser.email}
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isSavingToDrive}
+                  onClick={() => handleSaveToGoogleDrive("pdf")}
+                  className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm active:scale-95"
+                >
+                  {isSavingToDrive ? (
+                    <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  )}
+                  <span>Salvar PDF no Drive</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingToDrive}
+                  onClick={() => handleSaveToGoogleDrive("csv")}
+                  className="py-2.5 px-3 bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95"
+                >
+                  <span>Salvar CSV</span>
+                </button>
+              </div>
+
+              {driveStatus && (
+                <div className={`p-2.5 rounded-xl border text-[11px] leading-snug animate-in fade-in duration-200 ${
+                  driveStatus.type === "success" 
+                    ? "bg-emerald-50 border-emerald-150 text-emerald-800" 
+                    : "bg-rose-50 border-rose-150 text-rose-800"
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className={`h-4 w-4 shrink-0 mt-0.5 ${driveStatus.type === "success" ? "text-emerald-600" : "text-rose-500"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold">{driveStatus.message}</p>
+                      {driveStatus.link && (
+                        <a 
+                          href={driveStatus.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-indigo-600 hover:underline font-extrabold mt-1 block"
+                        >
+                          Visualizar Arquivo no Google Drive ↗
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

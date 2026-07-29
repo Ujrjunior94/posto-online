@@ -100,13 +100,13 @@ export function validateScheduleEntries(
     (s) => s.frentistaResponsavel && typeof s.frentistaResponsavel === "string" && s.frentistaResponsavel.trim().toLowerCase() !== "evento geral"
   );
 
-  // Collect distinct employees
+  // Collect distinct employees found in the schedules (fallback to registered users if empty)
   const employeeNamesSet = new Set<string>();
   validSchedules.forEach((s) => {
     const name = s.frentistaResponsavel.trim();
     if (name) employeeNamesSet.add(name);
   });
-  if (users && users.length > 0) {
+  if (employeeNamesSet.size === 0 && users && users.length > 0) {
     users.forEach((u) => {
       if (u.nomeCompleto) employeeNamesSet.add(u.nomeCompleto.trim());
     });
@@ -367,12 +367,13 @@ export default function OCRPlannerImporter({
         observacao: lp.observacao || "Apreendido via leitura inteligente OCR da foto/documento.",
       }));
 
-      // Validate schedules extracted
+      // Validate schedules extracted with precise days in month
       const valReport = validateScheduleEntries(
         data.schedules || [],
         users,
         activeMonth.year,
-        activeMonth.monthNum
+        activeMonth.monthNum,
+        activeMonth.days
       );
 
       setModalData({
@@ -404,16 +405,17 @@ export default function OCRPlannerImporter({
 
     const stats = modalData.validationReport.matrixStats;
     if (!stats.isComplete) {
-      alert(
-        `❌ GRAVAÇÃO CANCELADA — IMPORTAÇÃO INCOMPLETA\n\n` +
+      if (!confirm(
+        `⚠️ IMPORTAÇÃO INCOMPLETA DETECTADA\n\n` +
         `• Dias encontrados: ${stats.diasEncontrados}\n` +
         `• Funcionários encontrados: ${stats.funcionariosEncontrados}\n` +
         `• Registros esperados: ${stats.registrosEsperados}\n` +
         `• Registros importados: ${stats.registrosImportados}\n\n` +
         `Status: ${stats.statusText}\n\n` +
-        `A gravação foi interrompida para evitar dados parciais. Verifique a imagem ou planilha e reenvie a escala completa.`
-      );
-      return;
+        `Deseja prosseguir com a gravação dos dados parciais mesmo assim?`
+      )) {
+        return;
+      }
     }
 
     onConfirmImport({

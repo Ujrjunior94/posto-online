@@ -22,6 +22,7 @@ import {
   Truck,
   Sparkles,
   Eye,
+  Bot,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -944,6 +945,19 @@ export default function LMCManagement({
           >
             <Zap className="h-3.5 w-3.5" />
             Sincronizar Bicos & Cargas
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const event = new CustomEvent("OPEN_GERENTE_MARCOS");
+              window.dispatchEvent(event);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 border border-amber-500/30 text-amber-600 font-black text-xs rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+            title="Falar com o Gerente Virtual Marcos"
+          >
+            <Bot className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+            <span>Gerente AI</span>
           </button>
           <button
             onClick={() => {
