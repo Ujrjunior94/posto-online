@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, NozzleCalibration, ANPQualityAudit, FuelType, FuelDelivery, ShiftOccurrence, ShiftSchedule, FuelTank } from "../types";
 import {
   Thermometer,
@@ -1534,64 +1535,44 @@ export default function ANPQualityControl({
 
   return (
     <div className="space-y-6">
-      {/* Tab Navigation header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <Thermometer className="text-indigo-600 h-6 w-6" />
-            Vazão, Qualidade e NF-e
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Controle aferições mecânicas, emita laudos químicos de conformidade ANP e dê entrada nas notas de entrega
-          </p>
-        </div>
-
-        {/* Sub tabs selectors */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 self-start sm:self-auto">
-            <button
-              onClick={() => setActiveSubTab("afericao")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                activeSubTab === "afericao" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              📏 Teste 20L
-            </button>
-            <button
-              onClick={() => setActiveSubTab("laudo")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                activeSubTab === "laudo" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🧪 Laudo Químico
-            </button>
-            <button
-              onClick={() => setActiveSubTab("entregas")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                activeSubTab === "entregas" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🚚 Entregas NF-e
-            </button>
-            <button
-              onClick={() => setActiveSubTab("especificacoes_2026")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                activeSubTab === "especificacoes_2026" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              📊 Tabela Massa Específica ANP
-            </button>
-            <button
-              onClick={() => setActiveSubTab("tabela_conferencia")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
-                activeSubTab === "tabela_conferencia" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              🔍 Tabela de Conferência
-            </button>
-          </div>
-
-          {!isReadOnly && (
+      <SubTabNavigation
+        title="Vazão, Qualidade e NF-e"
+        titleIcon={<Thermometer className="h-5 w-5" />}
+        subtitle="Controle aferições mecânicas, emita laudos químicos de conformidade ANP e dê entrada nas notas de entrega"
+        activeTab={activeSubTab}
+        onChange={(tabId) => setActiveSubTab(tabId as any)}
+        tabs={[
+          {
+            id: "afericao",
+            label: "Teste 20L",
+            icon: <Gauge className="h-4 w-4" />,
+            badge: calibrations.length,
+          },
+          {
+            id: "laudo",
+            label: "Laudo Químico",
+            icon: <Thermometer className="h-4 w-4" />,
+            badge: qualityAudits.length,
+          },
+          {
+            id: "entregas",
+            label: "Entregas NF-e",
+            icon: <Truck className="h-4 w-4" />,
+            badge: fuelDeliveries.length,
+          },
+          {
+            id: "especificacoes_2026",
+            label: "Tabela Massa Específica",
+            icon: <Calculator className="h-4 w-4" />,
+          },
+          {
+            id: "tabela_conferencia",
+            label: "Tabela de Conferência",
+            icon: <FileText className="h-4 w-4" />,
+          },
+        ]}
+        rightElement={
+          !isReadOnly ? (
             <button
               type="button"
               onClick={() => {
@@ -1601,15 +1582,15 @@ export default function ANPQualityControl({
                   onUpdateQualityAudits([]);
                 }
               }}
-              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
               title="Limpar laudos e testes de qualidade ANP"
             >
-              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-              <span className="hidden sm:inline">Limpar Testes ANP</span>
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+              <span>Limpar Testes ANP</span>
             </button>
-          )}
-        </div>
-      </div>
+          ) : null
+        }
+      />
 
       {success && (
         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs">

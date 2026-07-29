@@ -6,6 +6,8 @@ import {
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
   User as FirebaseUser
 } from "firebase/auth";
 import { 
@@ -55,6 +57,8 @@ export {
   signOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
   doc,
   setDoc,
   getDoc,

@@ -58,6 +58,7 @@ import {
   Calendar,
   Sparkles,
   ArrowUpRight,
+  Users,
   Wifi,
   WifiOff,
   Share2,
@@ -917,22 +918,22 @@ export default function App() {
   const navigationItems = navigationSections.flatMap((s) => s.items);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex text-[#0F172A] font-sans pb-16 lg:pb-0">
+    <div className="min-h-screen bg-[#121417] flex text-slate-100 font-sans pb-16 lg:pb-0">
       
       {/* 1. SIDEBAR DESKTOP */}
-      <aside className="hidden lg:flex flex-col w-64 bg-[#0F172A] border-r border-slate-800/80 p-4 shrink-0 justify-between h-screen sticky top-0">
+      <aside className="hidden lg:flex flex-col w-64 bg-[#16191f] border-r border-slate-800/90 p-4 shrink-0 justify-between h-screen sticky top-0 shadow-2xl">
         <div className="space-y-4 overflow-y-auto pr-1">
           {/* Logo Brand */}
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-800/80">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-[#059669] to-[#10B981] flex items-center justify-center text-white font-bold shadow-md shadow-emerald-950/40 shrink-0">
-              <Building2 className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-400 to-[#d4af37] flex items-center justify-center text-slate-950 font-black shadow-lg shadow-amber-500/20 shrink-0">
+              <Building2 className="h-5 w-5 text-slate-950" />
             </div>
             <div className="truncate min-w-0">
-              <h1 className="font-extrabold text-white tracking-tight text-base font-display truncate" title={appState.nomePosto || "Meu Posto"}>
+              <h1 className="font-black text-white tracking-tight text-base font-display truncate" title={appState.nomePosto || "Meu Posto"}>
                 {appState.nomePosto || "Meu Posto"}
               </h1>
-              <span className="text-[10px] text-[#10B981] font-mono uppercase tracking-widest font-semibold block truncate">
-                ERP Sincronizado
+              <span className="text-[10px] text-amber-400 font-mono uppercase tracking-widest font-black block truncate">
+                CORPORATE ERP ANP
               </span>
             </div>
           </div>
@@ -959,14 +960,14 @@ export default function App() {
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition group relative cursor-pointer ${
                           activeTab === item.id
-                            ? "bg-[#10B981] text-white shadow-md shadow-emerald-900/30 font-extrabold"
+                            ? "bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-black"
                             : isAllowed
-                            ? "text-slate-300 hover:bg-slate-800/60 hover:text-white"
+                            ? "text-slate-300 hover:bg-slate-800/80 hover:text-white"
                             : "text-slate-600 cursor-not-allowed"
                         }`}
                       >
                         <div className="flex items-center gap-2.5 truncate min-w-0">
-                          <IconComponent className={`h-4 w-4 shrink-0 ${activeTab === item.id ? "text-white" : "text-slate-400 group-hover:text-slate-200"}`} />
+                          <IconComponent className={`h-4 w-4 shrink-0 ${activeTab === item.id ? "text-slate-950" : "text-slate-400 group-hover:text-amber-400"}`} />
                           <span className="truncate">{item.name}</span>
                         </div>
                         
@@ -983,12 +984,12 @@ export default function App() {
         </div>
 
         {/* User Info bottom card */}
-        <div className="pt-3 border-t border-slate-800/80 space-y-2.5 shrink-0">
-          <div className="flex items-center gap-2.5 bg-slate-900/90 p-2.5 rounded-2xl border border-slate-800">
+        <div className="pt-3 border-t border-slate-800 space-y-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 bg-[#121417] p-2.5 rounded-2xl border border-slate-800">
             <UserAvatar user={currentUser} size="sm" />
             <div className="truncate min-w-0">
               <p className="text-xs font-bold text-white truncate">{currentUser.nomeCompleto}</p>
-              <span className="text-[10px] bg-slate-800 text-emerald-400 border border-slate-700/80 px-2 py-0.5 rounded-full font-semibold inline-block">
+              <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold inline-block">
                 {currentUser.cargo}
               </span>
             </div>
@@ -1001,21 +1002,21 @@ export default function App() {
                 {syncConfig.autoSync ? (
                   <>
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                   </>
                 ) : (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
                 )}
               </span>
-              Auto-Sync
+              Auto-Sync Cloud
             </span>
-            <span className="font-mono text-[9.5px] uppercase tracking-wider text-slate-300 font-bold">{syncConfig.autoSync ? "Ativo" : "Pause"}</span>
+            <span className="font-mono text-[9.5px] uppercase tracking-wider text-amber-400 font-bold">{syncConfig.autoSync ? "Ativo" : "Pause"}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={handleInstallPWA}
-              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-[#10B981]/15 border border-[#10B981]/30 hover:bg-[#10B981]/25 text-[#10B981] font-bold text-[11px] rounded-xl transition cursor-pointer"
+              className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 font-bold text-[11px] rounded-xl transition cursor-pointer"
               title="Instalar Web App PWA"
             >
               <Smartphone className="h-3.5 w-3.5" />
@@ -1144,21 +1145,21 @@ export default function App() {
         )}
         
         {/* Top Header Principal */}
-        <header className="bg-white/90 backdrop-blur-xs border-b border-slate-200/80 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-2xs">
+        <header className="bg-[#16191f] backdrop-blur-md border-b border-slate-800 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-xl">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+              className="lg:hidden p-2 text-slate-300 hover:bg-slate-800 rounded-xl transition cursor-pointer"
             >
               <Menu className="h-6 w-6" />
             </button>
 
             <div>
-              <h1 className="font-extrabold text-[#0F172A] text-lg sm:text-2xl font-display tracking-tight leading-tight">
+              <h1 className="font-black text-white text-lg sm:text-2xl font-display tracking-tight leading-tight">
                 {navigationItems.find((n) => n.id === activeTab)?.name}
               </h1>
-              <p className="text-xs text-[#64748B] font-medium hidden sm:block">
-                CNPJ do Posto Ativo: <span className="font-mono text-[#0F172A] font-bold">{currentUser.cnpjPosto}</span> • Sistema de Gestão
+              <p className="text-xs text-slate-400 font-medium hidden sm:block font-mono">
+                CNPJ do Posto Ativo: <span className="font-mono text-amber-400 font-bold">{currentUser.cnpjPosto}</span> • Sistema Corporativo ANP
               </p>
             </div>
           </div>
@@ -1167,10 +1168,10 @@ export default function App() {
             {/* Real-time Continuous Online Sync Badge */}
             <button
               onClick={() => setActiveTab("sincronizacao")}
-              className={`px-3 py-1.5 rounded-full text-xs font-mono font-bold border transition flex items-center gap-2 cursor-pointer shadow-2xs ${
+              className={`px-3 py-1.5 rounded-full text-xs font-mono font-bold border transition flex items-center gap-2 cursor-pointer shadow-sm ${
                 isOnline
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                  : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                  : "bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20"
               }`}
               title="Status da Sincronização Contínua em Tempo Real no Banco de Dados"
             >
@@ -1178,7 +1179,7 @@ export default function App() {
                 {isOnline ? (
                   <>
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                   </>
                 ) : (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
@@ -1186,13 +1187,13 @@ export default function App() {
               </span>
               {isOnline ? (
                 <span className="flex items-center gap-1">
-                  <Wifi className="h-3.5 w-3.5 text-emerald-600 hidden sm:inline" />
-                  <span className="hidden md:inline">SINCRONIA CONTINUA 24/7</span>
+                  <Wifi className="h-3.5 w-3.5 text-emerald-400 hidden sm:inline" />
+                  <span className="hidden md:inline">SINCRONIA NUVEM</span>
                   <span className="md:hidden">ONLINE</span>
                 </span>
               ) : (
                 <span className="flex items-center gap-1">
-                  <WifiOff className="h-3.5 w-3.5 text-rose-600 hidden sm:inline" />
+                  <WifiOff className="h-3.5 w-3.5 text-rose-400 hidden sm:inline" />
                   <span>OFFLINE</span>
                 </span>
               )}
@@ -1206,7 +1207,7 @@ export default function App() {
                     getPendingFormsCountSW().then((c) => setPendingFormsCount(c));
                   });
                 }}
-                className="px-3 py-1.5 rounded-full text-xs font-mono font-black border bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 transition flex items-center gap-1.5 cursor-pointer shadow-xs animate-pulse"
+                className="px-3 py-1.5 rounded-full text-xs font-mono font-black border bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20 transition flex items-center gap-1.5 cursor-pointer shadow-xs animate-pulse"
                 title="Sincronizar formulários salvos offline no dispositivo"
               >
                 <span>📦 {pendingFormsCount} FORM{pendingFormsCount > 1 ? "S" : ""} OFFLINE</span>
@@ -1220,26 +1221,26 @@ export default function App() {
                 setCopiedShareLink(false);
                 setIsShareModalOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-full transition shadow-2xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs rounded-full transition cursor-pointer"
               title="Compartilhar link de acesso do posto"
             >
-              <Share2 className="h-3.5 w-3.5 text-emerald-600" />
+              <Share2 className="h-3.5 w-3.5 text-amber-400" />
               <span className="hidden sm:inline">Compartilhar</span>
             </button>
 
             {/* Guide/Onboarding Helper button */}
             <button
               onClick={() => setShowOnboarding(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs rounded-full transition shadow-2xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold text-xs rounded-full transition cursor-pointer"
               title="Acessar o assistente de introdução"
             >
-              <Sparkles className="h-3.5 w-3.5 text-indigo-600 animate-pulse" />
+              <Sparkles className="h-3.5 w-3.5 text-indigo-400 animate-pulse" />
               <span className="hidden md:inline">Guia Inicial</span>
             </button>
 
             {/* Pill/Badge de Data Monospaçada */}
-            <div className="bg-white border border-slate-200/80 px-3.5 py-1.5 rounded-full text-xs font-mono text-[#0F172A] font-bold shadow-2xs flex items-center gap-2">
-              <Calendar className="h-3.5 w-3.5 text-[#00B880]" />
+            <div className="bg-[#121417] border border-slate-800 px-3.5 py-1.5 rounded-full text-xs font-mono text-slate-200 font-bold flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-amber-400" />
               <span>
                 {new Date().toLocaleDateString("pt-BR", {
                   day: "2-digit",
@@ -1249,39 +1250,30 @@ export default function App() {
               </span>
             </div>
 
-            <button
-              onClick={handleInstallPWA}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00B880] hover:bg-[#05C480] text-white font-bold text-xs rounded-full transition shadow-2xs cursor-pointer"
-              title="Instalar aplicativo PWA"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">PWA</span>
-            </button>
-
             {/* Gerente Marcos Button in Header */}
             <button
               onClick={() => {
                 const event = new CustomEvent("OPEN_GERENTE_MARCOS");
                 window.dispatchEvent(event);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/30 font-extrabold text-xs rounded-full transition shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-amber-600/20 hover:from-amber-500/30 hover:to-amber-600/30 text-amber-300 border border-amber-500/40 font-black text-xs rounded-full transition shadow-xs cursor-pointer"
               title="Abrir Gerente Virtual Marcos"
             >
-              <Bot className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+              <Bot className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
               <span className="hidden sm:inline">Gerente Marcos</span>
             </button>
 
             {/* Limpar Dados Button in Top Header */}
             <button
               onClick={() => handleOpenGlobalClear()}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-extrabold text-xs rounded-full transition shadow-2xs cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-full transition cursor-pointer"
               title={`Limpar dados da aba ${navigationItems.find((n) => n.id === activeTab)?.name || "ativa"} ou do sistema`}
             >
-              <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
               <span className="hidden sm:inline">Limpar Dados</span>
             </button>
 
-            <div className="bg-emerald-50 text-[#00B880] border border-emerald-200/80 px-2.5 py-1 rounded-full text-xs font-black flex items-center gap-2 shadow-2xs">
+            <div className="bg-amber-400/10 text-amber-300 border border-amber-400/30 px-2.5 py-1 rounded-full text-xs font-black flex items-center gap-2">
               <UserAvatar user={currentUser} size="xs" />
               <span>{currentUser.cargo}</span>
             </div>
@@ -1510,28 +1502,36 @@ export default function App() {
       </button>
 
       {/* Section 3.E: Barra de Navegação Fixa Inferior (Bottom Bar) */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#0A192F] border-t border-slate-800/80 px-2 py-2 flex items-center justify-around shadow-2xl lg:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#16191f] border-t border-slate-800 px-3 py-2 flex items-center justify-around shadow-2xl lg:hidden backdrop-blur-md">
         {[
           { id: "dashboard", name: "Início", icon: LayoutDashboard },
-          { id: "caixa", name: "Bicos", icon: ClipboardList },
-          { id: "escalas", name: "Escalas", icon: Calendar },
-          { id: "ponto", name: "Ponto", icon: Fingerprint },
-          { id: "tanques", name: "Tanques", icon: Fuel },
+          { id: "caixa", name: "Operação", icon: ClipboardList },
+          { id: "escalas", name: "Equipe", icon: Users },
+          { id: "relatorios", name: "Relatórios", icon: FileText },
+          { id: "more_menu", name: "Mais", icon: Menu },
         ].map((tab) => {
-          const isActive = activeTab === tab.id;
+          const isActive = tab.id === "more_menu" ? sidebarOpen : activeTab === tab.id;
           const TabIcon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`transition cursor-pointer ${
+              onClick={() => {
+                if (tab.id === "more_menu") {
+                  setSidebarOpen(!sidebarOpen);
+                } else {
+                  setActiveTab(tab.id);
+                }
+              }}
+              className={`transition cursor-pointer flex flex-col items-center gap-0.5 ${
                 isActive
-                  ? "bg-[#00B880]/20 text-[#00B880] px-3 py-1.5 rounded-full flex items-center gap-1.5 font-extrabold text-xs"
-                  : "text-slate-400 hover:text-white p-1.5 flex flex-col items-center gap-0.5 text-[10px] font-medium"
+                  ? "text-amber-400 font-extrabold text-xs"
+                  : "text-slate-400 hover:text-white text-[10px] font-medium"
               }`}
             >
-              <TabIcon className="h-4 w-4 shrink-0" />
-              <span>{tab.name}</span>
+              <div className={`p-1 rounded-xl transition ${isActive ? "bg-amber-400/10 text-amber-400 border border-amber-400/30" : ""}`}>
+                <TabIcon className="h-4 w-4 shrink-0" />
+              </div>
+              <span className="text-[10px]">{tab.name}</span>
             </button>
           );
         })}

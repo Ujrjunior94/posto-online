@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { AppState, Nozzle, FuelTank } from "../types";
+import SubTabNavigation from "./SubTabNavigation";
 import { 
   Plus, 
   Trash2, 
@@ -202,35 +203,40 @@ export default function NozzlesManagement({ appState, userRole, onUpdateNozzles,
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <Activity className="text-indigo-600 h-6 w-6" />
-            Gerenciamento de Bicos e Bombas
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Cadastro de bicos, associação a tanques alimentadores e hodômetros mecânicos (encerrantes iniciais)
-          </p>
-        </div>
-
-        {!isReadOnly && (
-          <button
-            type="button"
-            onClick={() => {
-              if (onClearData) {
-                onClearData();
-              } else if (confirm("Deseja apagar todos os bicos cadastrados?")) {
-                onUpdateNozzles([]);
-              }
-            }}
-            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
-            title="Limpar bicos e encerantes"
-          >
-            <Trash2 className="h-4 w-4 text-rose-500" />
-            <span>Limpar Bicos</span>
-          </button>
-        )}
-      </div>
+      <SubTabNavigation
+        title="Gerenciamento de Bicos e Bombas"
+        titleIcon={<Activity className="h-5 w-5" />}
+        subtitle="Cadastro de bicos, associação a tanques alimentadores e hodômetros mecânicos (encerrantes iniciais)"
+        activeTab="bicos"
+        onChange={() => {}}
+        tabs={[
+          {
+            id: "bicos",
+            label: "Bicos Cadastrados",
+            icon: <Activity className="h-4 w-4" />,
+            badge: nozzles.length,
+          }
+        ]}
+        rightElement={
+          !isReadOnly ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (onClearData) {
+                  onClearData();
+                } else if (confirm("Deseja apagar todos os bicos cadastrados?")) {
+                  onUpdateNozzles([]);
+                }
+              }}
+              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Limpar bicos e encerantes"
+            >
+              <Trash2 className="h-4 w-4 text-rose-400" />
+              <span>Limpar Bicos</span>
+            </button>
+          ) : null
+        }
+      />
 
       {success && (
         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl flex items-center gap-2">

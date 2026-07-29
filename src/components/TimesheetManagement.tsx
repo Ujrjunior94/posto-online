@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, TimesheetEntry, User } from "../types";
 import { UserAvatar } from "./UserAvatar";
 import { 
@@ -535,80 +536,66 @@ export default function TimesheetManagement({
   return (
     <div className="space-y-6">
       
-      {/* Header Panel */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-        <div>
+      <SubTabNavigation
+        title="Folha de Ponto Eletrônica"
+        titleIcon={<Fingerprint className="h-5 w-5" />}
+        subtitle="Controle de presença frentistas, intervalos e espelho de ponto oficial"
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId as any)}
+        tabs={[
+          {
+            id: "bater-ponto",
+            label: "Registrar Ponto",
+            icon: <Clock className="h-4 w-4" />,
+          },
+          {
+            id: "folha-historico",
+            label: "Espelho de Ponto",
+            icon: <CalendarDays className="h-4 w-4" />,
+            badge: filteredEntries.length,
+          },
+          {
+            id: "dashboard",
+            label: "Resumo Mensal",
+            icon: <FileSpreadsheet className="h-4 w-4" />,
+          },
+        ]}
+        rightElement={
           <div className="flex items-center gap-2">
-            <Fingerprint className="h-6 w-6 text-emerald-600 animate-pulse" />
-            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight font-display">Folha de Ponto Eletrônica</h1>
+            <button
+              type="button"
+              onClick={() => {
+                if (onClearData) {
+                  onClearData();
+                } else if (confirm("Deseja apagar todos os registros de ponto eletrônico?")) {
+                  onUpdateTimesheetEntries([]);
+                }
+              }}
+              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Limpar registros de ponto eletrônico"
+            >
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+              <span>Limpar Ponto</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={requestNotifPermission}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                notifPermission === "granted"
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  : "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+              }`}
+              title="Clique para ativar/testar notificações de registro de ponto no seu navegador"
+            >
+              {notifPermission === "granted" ? <BellRing className="h-3.5 w-3.5 text-emerald-400" /> : <Bell className="h-3.5 w-3.5 text-amber-400 animate-bounce" />}
+              <span>
+                {notifPermission === "granted" ? "Notificações Ativas" : "Ativar Notificações"}
+              </span>
+            </button>
           </div>
-          <p className="text-xs text-slate-500 font-medium">Controle de presença frentistas, intervalos e espelho de ponto oficial</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => {
-              if (onClearData) {
-                onClearData();
-              } else if (confirm("Deseja apagar todos os registros de ponto eletrônico?")) {
-                onUpdateTimesheetEntries([]);
-              }
-            }}
-            className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
-            title="Limpar registros de ponto eletrônico"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-            <span className="hidden sm:inline">Limpar Ponto</span>
-          </button>
-
-          <button
-            onClick={requestNotifPermission}
-            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
-              notifPermission === "granted"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                : "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
-            }`}
-            title="Clique para ativar/testar notificações de registro de ponto no seu navegador"
-          >
-            {notifPermission === "granted" ? <BellRing className="h-3.5 w-3.5 text-emerald-600" /> : <Bell className="h-3.5 w-3.5 text-amber-600 animate-bounce" />}
-            <span className="hidden sm:inline">
-              {notifPermission === "granted" ? "Notificações Ativas" : "Ativar Notificações"}
-            </span>
-          </button>
-
-          {/* Tab selection */}
-          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 flex-1 sm:flex-initial">
-          <button
-            onClick={() => setActiveTab("bater-ponto")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
-              activeTab === "bater-ponto" ? "bg-white text-emerald-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Clock className="h-3.5 w-3.5 text-emerald-500" />
-            Registrar Ponto
-          </button>
-          <button
-            onClick={() => setActiveTab("folha-historico")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
-              activeTab === "folha-historico" ? "bg-white text-emerald-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <CalendarDays className="h-3.5 w-3.5 text-emerald-500" />
-            Espelho de Ponto ({filteredEntries.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
-              activeTab === "dashboard" ? "bg-white text-emerald-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
-            Resumo Mensal
-          </button>
-        </div>
-      </div>
-      </div>
+        }
+      />
 
       {/* Main Content Router */}
       {activeTab === "bater-ponto" && (

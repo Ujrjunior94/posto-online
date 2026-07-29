@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, LubricantDelivery, LubricantProduct } from "../types";
 import { 
   Droplets, 
@@ -143,44 +144,51 @@ export default function LubricantDeliveries({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <Droplets className="text-indigo-600 h-6 w-6" />
-            Entrada de Lubrificantes
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Registro de notas fiscais, controle de recebimento e conferência física de produtos
-          </p>
-        </div>
-        {!isReadOnly && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (onClearData) {
-                  onClearData();
-                } else if (confirm("Deseja apagar todos os registros de notas de lubrificantes?")) {
-                  onUpdateLubricants([]);
-                }
-              }}
-              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
-              title="Limpar entregas de lubrificantes"
-            >
-              <Trash2 className="h-4 w-4 text-rose-500" />
-              <span>Limpar Lubrificantes</span>
-            </button>
+      <SubTabNavigation
+        title="Entrada de Lubrificantes"
+        titleIcon={<Droplets className="h-5 w-5" />}
+        subtitle="Registro de notas fiscais, controle de recebimento e conferência física de produtos"
+        activeTab="notas"
+        onChange={() => {}}
+        tabs={[
+          {
+            id: "notas",
+            label: "Notas de Entrega",
+            icon: <Droplets className="h-4 w-4" />,
+            badge: lubricantDeliveries.length,
+          }
+        ]}
+        rightElement={
+          !isReadOnly ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (onClearData) {
+                    onClearData();
+                  } else if (confirm("Deseja apagar todos os registros de notas de lubrificantes?")) {
+                    onUpdateLubricants([]);
+                  }
+                }}
+                className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                title="Limpar entregas de lubrificantes"
+              >
+                <Trash2 className="h-4 w-4 text-rose-400" />
+                <span>Limpar Lubrificantes</span>
+              </button>
 
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-bold text-sm shadow-md cursor-pointer"
-            >
-              {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {showAddForm ? "Cancelar" : "Nova Nota"}
-            </button>
-          </div>
-        )}
-      </div>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer"
+              >
+                {showAddForm ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                <span>{showAddForm ? "Cancelar" : "Nova Nota"}</span>
+              </button>
+            </div>
+          ) : null
+        }
+      />
 
       {success && (
         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl flex items-center gap-2 animate-fade-in">

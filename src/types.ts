@@ -39,6 +39,7 @@ export interface Nozzle {
   encerranteInicial: number; // in liters (hodômetro mecânico inicial)
   precoPorLitro: number; // e.g., 5.89
   desconto?: number; // Optional discount in R$ per liter
+  status?: "Ativo" | "Livre" | "Manutencao" | "Bloqueado" | string;
 }
 
 export type ShiftName = "Turno A (Manhã)" | "Turno B (Tarde)" | "Turno C (Noite)" | string;
@@ -119,6 +120,7 @@ export interface NozzleClosing {
   encerranteFinal: number; // in liters
   litrosVendidos: number; // calculated: encerranteFinal - encerranteInicial
   valorVendidoCalculado: number; // calculated: litrosVendidos * precoPorLitro
+  valorTotalVendidos?: number; // alias for total sales
   assinaturaDigital?: string; // Data URL string of captured mouse/touch signature
   frentistaResponsavel?: string;
 }

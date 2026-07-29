@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, SupplyRequest, User } from "../types";
 import { 
   Package, 
@@ -384,79 +385,67 @@ export default function SupplyRequests({
   return (
     <div className="space-y-6">
       
-      {/* Upper tab dashboard toolbar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-        <div>
+      <SubTabNavigation
+        title="Pedidos de Suprimentos"
+        titleIcon={<Package className="h-5 w-5" />}
+        subtitle="Fardamentos, botas, materiais administrativos e manutenção"
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId as any)}
+        tabs={[
+          {
+            id: "listar",
+            label: "Listar Pedidos",
+            icon: <Package className="h-4 w-4" />,
+            badge: filteredRequests.length,
+          },
+          {
+            id: "novo",
+            label: "Novo Pedido",
+            icon: <PlusCircle className="h-4 w-4" />,
+          },
+          {
+            id: "estatisticas",
+            label: "Estatísticas",
+            icon: <FileText className="h-4 w-4" />,
+          },
+        ]}
+        rightElement={
           <div className="flex items-center gap-2">
-            <Package className="h-6 w-6 text-indigo-600 animate-pulse" />
-            <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight font-display">Pedidos de Suprimentos</h1>
-          </div>
-          <p className="text-xs text-slate-500 font-medium">Fardamentos, botas, materiais administrativos e manutenção</p>
-        </div>
-
-        {/* Tab selection & Notification button */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => {
-              if (onClearData) {
-                onClearData();
-              } else if (confirm("Deseja apagar todos os pedidos de suprimentos?")) {
-                onUpdateSupplyRequests([]);
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-2xl transition text-xs font-black cursor-pointer"
-            title="Limpar pedidos de suprimentos"
-          >
-            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-            <span className="hidden sm:inline">Limpar Pedidos</span>
-          </button>
-
-          <button
-            onClick={async () => {
-              const granted = await requestBrowserNotificationPermission();
-              if (granted) {
-                alert("🔔 Notificações ativadas! Você receberá alertas em tempo real sobre Pedidos de Material no navegador.");
-              } else {
-                alert("⚠️ Permissão de notificação não concedida no navegador.");
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200/80 rounded-2xl transition text-xs font-bold cursor-pointer"
-            title="Ativar Alertas no Navegador"
-          >
-            <Bell className="h-3.5 w-3.5 text-indigo-600" />
-            <span className="hidden sm:inline">Alertas do Navegador</span>
-          </button>
-
-          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200/50 flex-1 sm:flex-none">
             <button
-              onClick={() => setActiveTab("listar")}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-                activeTab === "listar" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
+              type="button"
+              onClick={() => {
+                if (onClearData) {
+                  onClearData();
+                } else if (confirm("Deseja apagar todos os pedidos de suprimentos?")) {
+                  onUpdateSupplyRequests([]);
+                }
+              }}
+              className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Limpar pedidos de suprimentos"
             >
-              Listar Pedidos ({filteredRequests.length})
+              <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+              <span>Limpar Pedidos</span>
             </button>
-          <button
-            onClick={() => setActiveTab("novo")}
-            className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 ${
-              activeTab === "novo" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <PlusCircle className="h-3.5 w-3.5 text-indigo-500" />
-            Novo Pedido
-          </button>
+
             <button
-              onClick={() => setActiveTab("estatisticas")}
-              className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition ${
-                activeTab === "estatisticas" ? "bg-white text-indigo-700 shadow-xs" : "text-slate-600 hover:text-slate-900"
-              }`}
+              type="button"
+              onClick={async () => {
+                const granted = await requestBrowserNotificationPermission();
+                if (granted) {
+                  alert("🔔 Notificações ativadas! Você receberá alertas em tempo real sobre Pedidos de Material no navegador.");
+                } else {
+                  alert("⚠️ Permissão de notificação não concedida no navegador.");
+                }
+              }}
+              className="px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              title="Ativar Alertas no Navegador"
             >
-              Estatísticas
+              <Bell className="h-3.5 w-3.5 text-indigo-400" />
+              <span>Alertas</span>
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Mini metric counters bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, DailyBalance as IDailyBalance, LmcRecord } from "../types";
 import { 
   BarChart3, 
@@ -756,82 +757,59 @@ export default function DailyBalance({
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Primary View Mode Selector */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-4 border-b border-slate-200 gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <Droplets className="text-emerald-600 h-6 w-6" />
-            Balanço Diário de Litragem & Fechamento
-          </h2>
-          <p className="text-xs text-slate-500 mt-1 uppercase tracking-wider font-semibold">
-            Conciliação física volumétrica de combustível e balanço financeiro
-          </p>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex flex-wrap items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80">
-          <button 
-            onClick={() => setView("litrage")}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
-              view === "litrage" 
-                ? "bg-emerald-600 text-white shadow-md shadow-emerald-900/20" 
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Droplets className="h-4 w-4" />
-            Balanço de Litragem
-          </button>
-          
-          <button 
-            onClick={() => setView("list")}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
-              view === "list" 
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/20" 
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <BarChart3 className="h-4 w-4" />
-            Fechamento Financeiro
-          </button>
-
-          <button 
-            onClick={() => setView("reports")}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer ${
-              view === "reports" 
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/20" 
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <FileText className="h-4 w-4" />
-            Relatórios DRE
-          </button>
-
-          {!isReadOnly && (
-            <>
+      <SubTabNavigation
+        title="Balanço Diário de Litragem & Fechamento"
+        titleIcon={<Droplets className="h-5 w-5" />}
+        subtitle="Conciliação física volumétrica de combustível e balanço financeiro"
+        activeTab={view}
+        onChange={(tabId) => setView(tabId as any)}
+        tabs={[
+          {
+            id: "litrage",
+            label: "Balanço de Litragem",
+            icon: <Droplets className="h-4 w-4" />,
+          },
+          {
+            id: "list",
+            label: "Fechamento Financeiro",
+            icon: <BarChart3 className="h-4 w-4" />,
+            badge: dailyBalances.length,
+          },
+          {
+            id: "reports",
+            label: "Relatórios DRE",
+            icon: <FileText className="h-4 w-4" />,
+          },
+        ]}
+        rightElement={
+          !isReadOnly ? (
+            <div className="flex items-center gap-2">
               <button 
+                type="button"
                 onClick={() => {
                   setEditingBalanceId(null);
                   setEditingLmcId(null);
                   setView("form");
                 }}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-900/20 cursor-pointer ml-1"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-500/20 cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
-                <span>Inserir Balanço Manual</span>
+                <span>Balanço Manual</span>
               </button>
               
               <button 
+                type="button"
                 onClick={() => setIsClearModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl transition font-black text-xs uppercase tracking-wider cursor-pointer shadow-sm shadow-rose-100 ml-1"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs cursor-pointer"
                 title="Limpar dados de balanço (financeiro e volumétrico)"
               >
-                <Trash2 className="h-4 w-4 text-rose-500" />
-                <span>Limpar Dados</span>
+                <Trash2 className="h-4 w-4 text-rose-400" />
+                <span>Limpar</span>
               </button>
-            </>
-          )}
-        </div>
-      </div>
+            </div>
+          ) : null
+        }
+      />
 
       {success && (
         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm rounded-xl flex items-center gap-2 animate-fade-in">

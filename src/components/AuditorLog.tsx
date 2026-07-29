@@ -4,6 +4,7 @@
  */
 
 import React, { useState } from "react";
+import SubTabNavigation from "./SubTabNavigation";
 import { AppState, ActivityLog } from "../types";
 import { History, Trash2, Search, Calendar, Filter, Sparkles } from "lucide-react";
 
@@ -47,26 +48,32 @@ export default function AuditorLog({ appState, cnpjPosto, onUpdateAudits, onClea
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <History className="text-indigo-600 h-6 w-6" />
-            Livro de Auditoria e Conformidade
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Histórico consolidado de todas as operações efetuadas por gerentes e frentistas no sistema
-          </p>
-        </div>
-        <button
-          onClick={handleClearLogs}
-          disabled={filteredLogs.length === 0}
-          className="px-4 py-2 bg-rose-50 border border-rose-100 hover:bg-rose-100/60 text-rose-700 font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Limpar Todos os Logs
-        </button>
-      </div>
+      <SubTabNavigation
+        title="Livro de Auditoria e Conformidade"
+        titleIcon={<History className="h-5 w-5" />}
+        subtitle="Histórico consolidado de todas as operações efetuadas por gerentes e frentistas no sistema"
+        activeTab="logs"
+        onChange={() => {}}
+        tabs={[
+          {
+            id: "logs",
+            label: "Registros de Auditoria",
+            icon: <History className="h-4 w-4" />,
+            badge: filteredLogs.length,
+          }
+        ]}
+        rightElement={
+          <button
+            type="button"
+            onClick={handleClearLogs}
+            disabled={filteredLogs.length === 0}
+            className="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-rose-400" />
+            <span>Limpar Logs</span>
+          </button>
+        }
+      />
 
       {/* Filter Box */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-4">

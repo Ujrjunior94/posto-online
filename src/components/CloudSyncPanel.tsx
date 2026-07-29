@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { AppState, SyncConfig, SystemCredential, User } from "../types";
+import SubTabNavigation from "./SubTabNavigation";
 import { db, doc, setDoc, getDoc } from "../lib/firebase";
 import { UserAvatar, PRESET_AVATAR_ICONS } from "./UserAvatar";
 import {
@@ -1061,25 +1062,30 @@ export default function CloudSyncPanel({
 
   return (
     <div className="space-y-6">
-      {/* Header Unlocked */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <Unlock className="text-indigo-600 h-6 w-6" />
-            Sistemas, Finanças e Segurança
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Configure faturamento bancário PJ, credenciais de concentradores / SEFAZ, visualizadores de escala e backups em nuvem
-          </p>
-        </div>
-        <button
-          onClick={() => setIsUnlocked(false)}
-          className="px-4 py-2 border border-slate-200 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-50 transition flex items-center gap-1.5 shadow-sm cursor-pointer"
-        >
-          <Lock className="h-3.5 w-3.5" />
-          Bloquear Acesso
-        </button>
-      </div>
+      <SubTabNavigation
+        title="Sistemas, Finanças e Segurança"
+        titleIcon={<Unlock className="h-5 w-5" />}
+        subtitle="Configure faturamento bancário PJ, credenciais de concentradores / SEFAZ, visualizadores de escala e backups em nuvem"
+        activeTab="sistemas"
+        onChange={() => {}}
+        tabs={[
+          {
+            id: "sistemas",
+            label: "Sistemas e Segurança",
+            icon: <Unlock className="h-4 w-4" />,
+          }
+        ]}
+        rightElement={
+          <button
+            type="button"
+            onClick={() => setIsUnlocked(false)}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Lock className="h-3.5 w-3.5 text-slate-400" />
+            <span>Bloquear Acesso</span>
+          </button>
+        }
+      />
 
       {syncStatus.message && (
         <div

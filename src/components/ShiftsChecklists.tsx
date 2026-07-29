@@ -7,6 +7,7 @@ import React, { useState, useEffect } from "react";
 import { AppState, ShiftSchedule, User, UserRole, EscalaPattern, ShiftStatusType } from "../types";
 import { UserAvatar, PRESET_AVATAR_ICONS } from "./UserAvatar";
 import OCRPlannerImporter, { validateScheduleEntries } from "./OCRPlannerImporter";
+import SubTabNavigation from "./SubTabNavigation";
 import {
   ClipboardList,
   Clock,
@@ -2058,38 +2059,26 @@ export default function ShiftsChecklists({
 
   return (
     <div className="space-y-6">
-      {/* Upper Navigation Tabs */}
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 font-display">
-            <ClipboardList className="text-indigo-600 h-6 w-6" />
-            Escalas e Checklists de Pista
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            Planeje escalas de frentistas, revezamentos de folgas e vistorie checklists de segurança da pista
-          </p>
-        </div>
-
-        {/* Tab Selection */}
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 self-start sm:self-auto">
-          <button
-            onClick={() => setActiveTab("planner")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === "planner" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            🗓️ Planner de Escalas
-          </button>
-          <button
-            onClick={() => setActiveTab("list")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === "list" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            👥 Cadastro & Checklist
-          </button>
-        </div>
-      </div>
+      <SubTabNavigation
+        title="Escalas e Checklists de Pista"
+        titleIcon={<ClipboardList className="h-5 w-5" />}
+        subtitle="Planeje escalas de frentistas, revezamentos de folgas e vistorie checklists de segurança da pista"
+        activeTab={activeTab}
+        onChange={(tabId) => setActiveTab(tabId as "planner" | "list")}
+        tabs={[
+          {
+            id: "planner",
+            label: "Planner de Escalas",
+            icon: <CalendarIcon className="h-4 w-4" />,
+            badge: shifts.length,
+          },
+          {
+            id: "list",
+            label: "Cadastro & Checklist",
+            icon: <ClipboardList className="h-4 w-4" />,
+          },
+        ]}
+      />
 
       {/* VIEW A: INTERACTIVE PLANNER */}
       {activeTab === "planner" && (
