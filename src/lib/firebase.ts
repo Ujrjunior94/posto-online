@@ -43,13 +43,17 @@ let analytics: any = null;
 if (typeof window !== "undefined") {
   isSupported().then((supported) => {
     if (supported) {
-      analytics = getAnalytics(app);
-      console.log("[Firebase Analytics] Habilitado com sucesso.");
+      try {
+        analytics = getAnalytics(app);
+        console.log("[Firebase Analytics] Habilitado com sucesso.");
+      } catch (err) {
+        console.warn("[Firebase Analytics] Não foi possível inicializar o Analytics (rede ou sandbox):", err);
+      }
     } else {
-      console.warn("[Firebase Analytics] Não é suportado neste navegador.");
+      console.warn("[Firebase Analytics] Não é suportado neste ambiente.");
     }
   }).catch((err) => {
-    console.warn("[Firebase Analytics] Falha ao verificar suporte:", err);
+    console.warn("[Firebase Analytics] Falha ao verificar suporte do Analytics (silencioso):", err?.message || err);
   });
 }
 

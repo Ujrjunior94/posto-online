@@ -6,6 +6,8 @@
 import React, { useState } from "react";
 import SubTabNavigation from "./SubTabNavigation";
 import { AppState, LubricantDelivery, LubricantProduct } from "../types";
+import BarcodeScannerModal from "./BarcodeScannerModal";
+import { LubricantBarcodeItem } from "../data/lubricantBarcodes";
 import { 
   Droplets, 
   Plus, 
@@ -19,7 +21,10 @@ import {
   CheckSquare,
   Square,
   ArrowRight,
-  X
+  X,
+  ScanLine,
+  Camera,
+  Sparkles
 } from "lucide-react";
 
 interface LubricantDeliveriesProps {
@@ -53,8 +58,28 @@ export default function LubricantDeliveries({
   const [prodQtd, setProdQtd] = useState<number>(1);
   const [prodUnidade, setProdUnidade] = useState<LubricantProduct["unidade"]>("Frasco");
 
+  // Barcode Scanner Camera State
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannedNotification, setScannedNotification] = useState<string | null>(null);
+
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+
+  const handleBarcodeDetected = (barcode: string, matchedProduct?: LubricantBarcodeItem | null) => {
+    if (matchedProduct) {
+      setProdNome(matchedProduct.nome);
+      setProdUnidade(matchedProduct.unidadePadrao);
+      setScannedNotification(`Código ${barcode} reconhecido: ${matchedProduct.nome}`);
+    } else {
+      const fallbackName = `Lubrificante (Cód. ${barcode})`;
+      setProdNome(fallbackName);
+      setScannedNotification(`Código de barras ${barcode} lido! Nome preenchido para conferência.`);
+    }
+
+    setTimeout(() => {
+      setScannedNotification(null);
+    }, 5000);
+  };
 
   const handleAddProductToList = () => {
     if (!prodNome) return;
@@ -269,21 +294,48 @@ export default function LubricantDeliveries({
               </div>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
-              <h4 className="text-xs font-bold text-slate-600 uppercase flex items-center gap-2">
-                <Package className="h-4 w-4" />
-                Produtos da Nota
-              </h4>
+            <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-100 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
+                  <Package className="h-4 w-4 text-indigo-600" />
+                  Produtos da Nota
+                </h4>
+
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs rounded-xl shadow-sm transition cursor-pointer border border-emerald-400/30 active:scale-95 shrink-0"
+                >
+                  <Camera className="h-3.5 w-3.5 text-emerald-200" />
+                  <ScanLine className="h-3.5 w-3.5 text-white animate-pulse" />
+                  <span>Escanear com Câmera (Código de Barras)</span>
+                </button>
+              </div>
+
+              {scannedNotification && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs rounded-xl flex items-center gap-2 font-bold animate-in fade-in duration-200">
+                  <Sparkles className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>{scannedNotification}</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                <div className="md:col-span-6">
+                <div className="md:col-span-6 relative">
                   <input
                     type="text"
                     value={prodNome}
                     onChange={(e) => setProdNome(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none"
-                    placeholder="Nome do produto (Ex: Óleo 5W30 1L)"
+                    className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
+                    placeholder="Nome do produto (Ex: Óleo 5W30 1L ou Bipe com Câmera)"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setIsScannerOpen(true)}
+                    className="absolute right-2 top-2 text-slate-400 hover:text-emerald-600 transition p-0.5 rounded cursor-pointer"
+                    title="Escanear Código de Barras"
+                  >
+                    <ScanLine className="h-4 w-4" />
+                  </button>
                 </div>
                 <div className="md:col-span-2">
                   <input
@@ -462,6 +514,14 @@ export default function LubricantDeliveries({
           ))
         )}
       </div>
+
+      {/* Barcode Scanner Modal */}
+      <BarcodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onBarcodeDetected={handleBarcodeDetected}
+        appStateDeliveries={lubricantDeliveries}
+      />
     </div>
   );
 }

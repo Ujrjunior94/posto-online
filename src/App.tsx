@@ -377,8 +377,12 @@ export default function App() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
+    const handleOpenPwaInstaller = () => setIsPwaModalOpen(true);
+    window.addEventListener("OPEN_PWA_INSTALLER", handleOpenPwaInstaller);
+
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("OPEN_PWA_INSTALLER", handleOpenPwaInstaller);
     };
   }, []);
 
@@ -1346,6 +1350,16 @@ export default function App() {
                 })}
               </span>
             </div>
+
+            {/* Instalador PWA Button in Header */}
+            <button
+              onClick={handleInstallPWA}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-black text-xs rounded-full transition shadow-xs cursor-pointer"
+              title="Abrir Instalador Web App (PWA)"
+            >
+              <Smartphone className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Instalador PWA</span>
+            </button>
 
             {/* Gerente Marcos Button in Header */}
             <button

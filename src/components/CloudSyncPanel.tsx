@@ -28,6 +28,7 @@ import {
   Upload,
   Clock,
   Calendar,
+  Smartphone,
   HardDrive,
   RefreshCw,
   FileJson,
@@ -2376,6 +2377,37 @@ export default function CloudSyncPanel({
               Último backup realizado: {new Date(syncConfig.lastBackupDate).toLocaleString("pt-BR")}
             </p>
           )}
+        </div>
+
+        {/* PWA Mobile & Desktop Installer Card */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-emerald-950 text-white rounded-2xl p-5 shadow-sm space-y-4 border border-emerald-500/30">
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-emerald-400" />
+              Aplicativo Mobile & PWA
+            </h3>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              Offline Ready
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Instale o <strong>Meu Posto Infinity</strong> no celular ou computador para operar sem barra de navegação, com suporte 100% offline para lançamento de LMC e folha de ponto em pista.
+          </p>
+
+          <div className="space-y-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                const event = new CustomEvent("OPEN_PWA_INSTALLER");
+                window.dispatchEvent(event);
+              }}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 rounded-xl transition text-xs flex items-center justify-center gap-2 shadow-md cursor-pointer"
+            >
+              <Smartphone className="h-4 w-4 text-slate-950" />
+              <span>Abrir Instalador Web App (PWA)</span>
+            </button>
+          </div>
         </div>
 
         {/* Configuração de Unidade, Cabeçalho e Assinatura */}
