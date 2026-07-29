@@ -79,7 +79,9 @@ import {
   doc, 
   getDoc, 
   setDoc,
-  onSnapshot 
+  onSnapshot,
+  getRedirectResult,
+  logAuthTelemetry
 } from "./lib/firebase";
 
 export default function App() {
@@ -402,6 +404,35 @@ export default function App() {
 
   // Sync Firebase Auth session
   useEffect(() => {
+    // Process redirect result if page has reloaded from Google signInWithRedirect
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log("Usuário autenticado via redirect com sucesso:", result.user);
+          const pendingLogId = localStorage.getItem("pending_auth_log_id");
+          if (pendingLogId) {
+            logAuthTelemetry(pendingLogId, "redirect_result", "success", {
+              uid: result.user?.uid,
+              email: result.user?.email,
+              message: "Autenticado via redirect com sucesso"
+            });
+            localStorage.removeItem("pending_auth_log_id");
+          }
+        }
+      })
+      .catch((err: any) => {
+        console.error("Erro ao obter resultado do redirecionamento de autenticação:", err);
+        const pendingLogId = localStorage.getItem("pending_auth_log_id");
+        if (pendingLogId) {
+          logAuthTelemetry(pendingLogId, "redirect_result", "failed", {
+            errorCode: err.code || "unknown",
+            errorMessage: err.message || "Erro no redirect",
+            message: "Falha na autenticação via redirect"
+          });
+          localStorage.removeItem("pending_auth_log_id");
+        }
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         let userData: User | null = null;
@@ -435,14 +466,21 @@ export default function App() {
           // Fallback default user object for firebase user
           userData = {
             id: firebaseUser.uid,
-            nomeCompleto: firebaseUser.displayName || firebaseUser.email.split("@")[0] || "Usuário",
+            nomeCompleto: firebaseUser.displayName || firebaseUser.email.split("@")[0].toUpperCase() || "Usuário Google",
             email: firebaseUser.email,
-            senhaCriptografada: "******",
+            senhaCriptografada: "google_oauth_auth",
             cpf: "000.000.000-00",
             cargo: "Gerente",
             cnpjPosto: "12.345.678/0001-99",
-            telefone: "(00) 00000-0000",
+            telefone: firebaseUser.phoneNumber || "(00) 00000-0000",
           };
+
+          // Save Google-redirect fallback user into Firestore so they are registered permanently
+          try {
+            await setDoc(doc(db, "users", firebaseUser.uid), userData);
+          } catch (saveErr) {
+            console.error("Erro ao registrar usuário fallback do Google no Firestore:", saveErr);
+          }
         }
 
         if (userData) {

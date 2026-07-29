@@ -13,7 +13,7 @@ import {
   createUserWithEmailAndPassword, 
   sendPasswordResetEmail,
   GoogleAuthProvider,
-  signInWithPopup,
+  safeSignInWithGoogle,
   doc, 
   setDoc, 
   getDoc 
@@ -176,8 +176,14 @@ export default function AuthScreen({ onLogin, existingUsers, onRegister }: AuthS
     setSuccess("");
     setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      const result = await safeSignInWithGoogle();
+      
+      // If we got null, it means we redirected via signInWithRedirect fallback
+      if (!result) {
+        setSuccess("Ambiente restrito detectado. Redirecionando para login seguro do Google...");
+        return;
+      }
+      
       const firebaseUser = result.user;
 
       const userDocRef = doc(db, "users", firebaseUser.uid);

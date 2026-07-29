@@ -154,6 +154,132 @@ export default function HolographicCockpitRadar({ appState, onNavigate }: Hologr
 
   const currentSectorData = sectors.find(s => s.id === activeSector) || sectors[2];
 
+  // Helper function to render the coin face with accurate gradients, 3D shadows, bevels, and the metallic italic logo
+  const renderCoinFace = (isFront: boolean, isEdge: boolean = false) => {
+    // Generate unique gradient IDs based on the side to prevent SVG cache conflicts
+    const idSuffix = isFront ? "front" : isEdge ? "edge" : "back";
+    
+    return (
+      <svg viewBox="0 0 500 500" className={`w-full h-full ${isEdge ? "opacity-80" : "drop-shadow-[0_20px_35px_rgba(0,0,0,0.7)]"}`} style={{ backfaceVisibility: "hidden" }}>
+        <defs>
+          {/* Metallic silver outer border gradient with continuous reflections */}
+          <linearGradient id={`silver-border-${idSuffix}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="15%" stopColor="#cbd5e1" />
+            <stop offset="30%" stopColor="#f8fafc" />
+            <stop offset="45%" stopColor="#64748b" />
+            <stop offset="60%" stopColor="#e2e8f0" />
+            <stop offset="75%" stopColor="#475569" />
+            <stop offset="90%" stopColor="#f1f5f9" />
+            <stop offset="100%" stopColor="#ffffff" />
+          </linearGradient>
+
+          {/* Inner shiny bevel border gradient */}
+          <linearGradient id={`inner-bevel-${idSuffix}`} x1="100%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+            <stop offset="50%" stopColor="#94a3b8" />
+            <stop offset="100%" stopColor="#1e293b" />
+          </linearGradient>
+
+          {/* Outer rim glossiness overlay */}
+          <radialGradient id={`rim-shine-${idSuffix}`} cx="50%" cy="50%" r="50%" fx="30%" fy="30%">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45"/>
+            <stop offset="70%" stopColor="#0f172a" stopOpacity="0"/>
+            <stop offset="100%" stopColor="#020617" stopOpacity="0.6"/>
+          </radialGradient>
+
+          {/* Deep blue metallic side brushed gradient */}
+          <linearGradient id={`metal-blue-${idSuffix}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#1e3a8a" />
+            <stop offset="30%" stopColor="#3b82f6" />
+            <stop offset="70%" stopColor="#1d4ed8" />
+            <stop offset="100%" stopColor="#172554" />
+          </linearGradient>
+
+          {/* Deep red metallic side brushed gradient */}
+          <linearGradient id={`metal-red-${idSuffix}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#881337" />
+            <stop offset="35%" stopColor="#dc2626" />
+            <stop offset="70%" stopColor="#9f1239" />
+            <stop offset="100%" stopColor="#4c0519" />
+          </linearGradient>
+
+          {/* Silver/steel bevel gradient for central letter 'm' */}
+          <linearGradient id={`m-metal-${idSuffix}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="30%" stopColor="#cbd5e1" />
+            <stop offset="60%" stopColor="#475569" />
+            <stop offset="85%" stopColor="#94a3b8" />
+            <stop offset="100%" stopColor="#f8fafc" />
+          </linearGradient>
+
+          {/* 3D Drop shadow filter for the center logo element */}
+          <filter id={`m-shadow-${idSuffix}`} x="-15%" y="-15%" width="130%" height="130%">
+            <feDropShadow dx="3" dy="6" stdDeviation="4" floodColor="#000000" floodOpacity="0.75" />
+          </filter>
+        </defs>
+
+        {/* Outer Ring: Solid Polished Silver Metal rim */}
+        <circle cx="250" cy="250" r="235" fill={`url(#silver-border-${idSuffix})`} stroke="#0f172a" strokeWidth="2.5" />
+        
+        {isEdge ? (
+          /* Edge/Side view filling - Solid high-contrast metallic slate */
+          <circle cx="250" cy="250" r="226" fill="#64748b" />
+        ) : (
+          <>
+            {/* Center core: Blue/Red background divided by elegant diagonal white stripe */}
+            <g clipPath={`url(#inner-clip-${idSuffix})`}>
+              <clipPath id={`inner-clip-${idSuffix}`}>
+                <circle cx="250" cy="250" r="224" />
+              </clipPath>
+
+              {/* Top-left deep blue metallic canvas */}
+              <rect x="0" y="0" width="500" height="500" fill={`url(#metal-blue-${idSuffix})`} />
+
+              {/* Bottom-right rich ruby red metallic canvas */}
+              <path d="M -80 580 L 580 580 L 580 230 C 420 370, 160 120, -80 340 Z" fill={`url(#metal-red-${idSuffix})`} />
+
+              {/* Sweeping white diagonal wave separator */}
+              <path d="M -80 330 C 160 110, 420 360, 580 210 L 580 238 C 420 388, 160 138, -80 358 Z" fill="#ffffff" />
+            </g>
+
+            {/* Inner rim overlay for high-end glass glow, volume, and realistic coin reflections */}
+            <circle cx="250" cy="250" r="224" fill={`url(#rim-shine-${idSuffix})`} pointerEvents="none" />
+            <circle cx="250" cy="250" r="224" fill="none" stroke={`url(#inner-bevel-${idSuffix})`} strokeWidth="4" strokeOpacity="0.6" />
+
+            {/* Centered stylized lowercase metallic 'm' with dynamic depth */}
+            <g filter={`url(#m-shadow-${idSuffix})`} transform="translate(0, 4)">
+              {/* This is a customized, highly stylized typographic italic 'm' representing the uploaded logo with extreme accuracy */}
+              <path 
+                d="M 125 350 
+                   L 172 165 
+                   C 176 150, 202 142, 222 142 
+                   C 255 142, 272 160, 268 190 
+                   C 285 158, 312 142, 342 142 
+                   C 382 142, 402 170, 392 210 
+                   L 358 350 
+                   L 310 350 
+                   L 340 220 
+                   C 345 200, 335 192, 318 192 
+                   C 298 192, 280 215, 274 240 
+                   L 248 350 
+                   L 200 350 
+                   L 230 220 
+                   C 235 200, 225 192, 208 192 
+                   C 188 192, 170 215, 164 240 
+                   L 138 350 
+                   Z" 
+                fill={`url(#m-metal-${idSuffix})`}
+                stroke="#1e293b" 
+                strokeWidth="2" 
+              />
+            </g>
+          </>
+        )}
+      </svg>
+    );
+  };
+
   return (
     <div className="bg-gradient-to-br from-[#161920] via-[#121418] to-[#0e1014] rounded-3xl p-5 sm:p-7 border border-slate-800 shadow-2xl relative overflow-hidden space-y-6">
       
@@ -247,140 +373,51 @@ export default function HolographicCockpitRadar({ appState, onNavigate }: Hologr
           {/* Projector Base Ring Emitter */}
           <div className="absolute w-44 h-44 sm:w-56 sm:h-56 rounded-full border-2 border-dashed border-amber-400/40 bg-amber-500/5 shadow-[0_0_30px_rgba(229,193,88,0.2)] animate-spin opacity-50 pointer-events-none" style={{ animationDuration: "20s" }} />
 
-          {/* 3D ISOMETRIC MINIATURE FUEL POST HOLOGRAM */}
+          {/* 3D ROTATING COIN EMBLEM HOLOGRAM */}
           <div 
-            className="relative w-72 h-72 sm:w-96 sm:h-96 flex items-center justify-center transition-transform duration-300 ease-out"
+            className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center transition-transform duration-300 ease-out"
             style={{
               transform: `perspective(1000px) rotateX(${tiltAngle}deg) rotateZ(${rotationAngle}deg) translateY(${levitationOffset}px)`,
               transformStyle: "preserve-3d"
             }}
           >
-            {/* Ground Plate Hologram (Base Flutuante do Posto) */}
-            <div 
-              className="absolute inset-2 bg-gradient-to-br from-amber-500/10 via-slate-900/90 to-cyan-500/10 rounded-3xl border-2 border-amber-400/40 shadow-[0_0_60px_rgba(229,193,88,0.3)] flex flex-col items-center justify-center relative overflow-hidden backdrop-blur-md"
-              style={{ transformStyle: "preserve-3d" }}
-            >
-              
-              {/* Ground Grid lines */}
-              <div className="absolute inset-0 bg-[linear-gradient(to_right,#e5c15815_1px,transparent_1px),linear-gradient(to_bottom,#e5c15815_1px,transparent_1px)] bg-[size:1.5rem_1.5rem] pointer-events-none" />
+            {/* 3D Stacked Coin (gives a real 3D depth/thickness of 10px) */}
+            <div className="relative w-full h-full" style={{ transformStyle: "preserve-3d" }}>
+              {/* Back Face */}
+              <div 
+                className="absolute inset-0"
+                style={{ 
+                  transform: "translateZ(-10px) rotateY(180deg)", 
+                  backfaceVisibility: "hidden" 
+                }}
+              >
+                {renderCoinFace(false, false)}
+              </div>
 
-              {/* 4 Corner Pylons with Laser Beacons */}
-              {[
-                "top-2 left-2",
-                "top-2 right-2",
-                "bottom-2 left-2",
-                "bottom-2 right-2"
-              ].map((pos, idx) => (
-                <div key={idx} className={`absolute ${pos} w-3 h-3 bg-slate-950 border border-amber-400 rounded-sm flex items-center justify-center shadow-[0_0_10px_#e5c158]`}>
-                  <div className="w-1.5 h-1.5 bg-amber-300 rounded-full animate-ping" />
+              {/* Edge Layers (Middle Extrusion) */}
+              {[...Array(10)].map((_, idx) => (
+                <div 
+                  key={idx}
+                  className="absolute inset-0"
+                  style={{ 
+                    transform: `translateZ(${-idx}px)`,
+                    backfaceVisibility: "hidden"
+                  }}
+                >
+                  {renderCoinFace(false, true)}
                 </div>
               ))}
 
-              {/* CANOPY STRUCTURE (Cobertura de Pista com Colunas 3D) */}
+              {/* Front Face */}
               <div 
-                className="w-56 h-40 bg-gradient-to-br from-slate-900/90 via-[#181d28]/95 to-amber-950/40 rounded-2xl border-2 border-amber-400/60 shadow-[0_20px_50px_rgba(0,0,0,0.8)] backdrop-blur-xl flex flex-col items-center justify-between p-3 relative group"
-                style={{ transform: "translateZ(50px)", transformStyle: "preserve-3d" }}
+                className="absolute inset-0"
+                style={{ 
+                  transform: "translateZ(0px)",
+                  backfaceVisibility: "hidden" 
+                }}
               >
-                {/* Roof Brand Sign & Glowing Edge */}
-                <div className="w-full bg-slate-950/90 border border-amber-400/50 rounded-xl py-1 px-3 flex items-center justify-between shadow-lg">
-                  <span className="text-[9px] font-black tracking-widest text-amber-300 uppercase font-mono flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    MEU POSTO NEXT
-                  </span>
-                  <span className="text-[8px] font-mono text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-400/30">
-                    ANP OK
-                  </span>
-                </div>
-                
-                {/* PUMP ISLANDS & PUMPS (4 Bombas de Combustível com Ilhas) */}
-                <div className="grid grid-cols-2 gap-5 w-full px-1 relative z-10">
-                  {[
-                    { id: "B01", label: "Gasolina", color: "border-cyan-400 text-cyan-300 bg-cyan-950/60" },
-                    { id: "B02", label: "G. Aditivada", color: "border-emerald-400 text-emerald-300 bg-emerald-950/60" },
-                    { id: "B03", label: "Etanol", color: "border-amber-400 text-amber-300 bg-amber-950/60" },
-                    { id: "B04", label: "Diesel S10", color: "border-purple-400 text-purple-300 bg-purple-950/60" }
-                  ].map((p, pIdx) => (
-                    <div 
-                      key={pIdx} 
-                      className={`p-1.5 rounded-xl border ${p.color} backdrop-blur-md shadow-lg flex flex-col justify-between relative overflow-hidden`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[8px] font-mono font-black">{p.id}</span>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      </div>
-                      <div className="text-[7px] font-mono truncate text-slate-300 mt-0.5">
-                        {p.label}
-                      </div>
-                      {/* Active Meter Simulation */}
-                      <div className="mt-1 bg-slate-950 px-1 py-0.5 rounded text-[7px] font-mono text-emerald-400 flex justify-between border border-emerald-500/30">
-                        <span>LITROS:</span>
-                        <span className="font-bold">48.2L</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* 4 Pillars connecting roof to ground (Colunas 3D da Cobertura) */}
-                <div className="absolute -bottom-3 left-3 w-2.5 h-10 bg-gradient-to-b from-amber-400 to-slate-800 rounded-sm shadow-md" />
-                <div className="absolute -bottom-3 right-3 w-2.5 h-10 bg-gradient-to-b from-amber-400 to-slate-800 rounded-sm shadow-md" />
-
-                {/* MINIATURE VEHICLES AT THE PUMPS (Carros Abastecendo) */}
-                <div className="absolute -left-7 top-10 bg-cyan-500/20 border border-cyan-400/80 rounded-lg px-2 py-1 flex items-center gap-1 shadow-lg backdrop-blur-md">
-                  <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                  <span className="text-[7px] font-black text-cyan-200 uppercase font-mono">Carro 01 • Abastecendo</span>
-                </div>
-
+                {renderCoinFace(true, false)}
               </div>
-
-              {/* MINIATURE FUEL TANKER TRUCK (Caminhão Tanque de Unloading) */}
-              <div 
-                className="absolute top-3 right-3 bg-gradient-to-r from-purple-900/90 to-slate-950 p-1.5 rounded-xl border border-purple-400/60 shadow-xl flex items-center gap-2"
-                style={{ transform: "translateZ(25px)" }}
-              >
-                <Truck className="h-4 w-4 text-purple-300 shrink-0" />
-                <div>
-                  <div className="text-[8px] font-black text-purple-200 uppercase font-mono">Descarga Ativa</div>
-                  <div className="text-[7px] text-purple-300 font-mono">S10 • 15.000 L</div>
-                </div>
-              </div>
-
-              {/* UNDERGROUND STORAGE TANKS VAULT (Tanques Subterrâneos Holográficos em 3D) */}
-              <div 
-                className="absolute bottom-2 inset-x-4 bg-slate-950/95 border-2 border-amber-500/50 p-2 rounded-2xl shadow-[0_0_30px_rgba(229,193,88,0.25)] flex items-center justify-around"
-                style={{ transform: "translateZ(-25px)" }}
-              >
-                {tanks.map((t, idx) => {
-                  const fillPct = Math.min(100, Math.round((t.volumeAtual / t.capacidadeMaxima) * 100));
-                  const isCrit = t.volumeAtual <= t.pontoCriticoAlerta;
-
-                  return (
-                    <div key={idx} className="flex flex-col items-center gap-1 group/tank cursor-pointer">
-                      <div className="text-[7px] font-mono font-bold text-amber-300 bg-slate-900 px-1 py-0.5 rounded border border-amber-500/30">
-                        {fillPct}%
-                      </div>
-                      
-                      {/* Cylindrical 3D Tank */}
-                      <div className="w-7 h-11 bg-slate-900 border-2 border-slate-700 rounded-lg relative overflow-hidden shadow-inner flex flex-col justify-end">
-                        <div 
-                          className={`w-full transition-all duration-1000 ${
-                            isCrit 
-                              ? "bg-gradient-to-t from-rose-600 via-rose-500 to-rose-400 animate-pulse" 
-                              : "bg-gradient-to-t from-amber-600 via-amber-400 to-amber-300"
-                          }`}
-                          style={{ height: `${fillPct}%` }}
-                        >
-                          <div className="w-full h-1 bg-white/40 animate-pulse" />
-                        </div>
-                      </div>
-
-                      <span className="text-[7px] font-mono text-slate-300 truncate max-w-[50px]">
-                        {(t.combustivel || "").split(" ")[0]}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
             </div>
           </div>
 
