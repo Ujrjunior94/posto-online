@@ -178,12 +178,21 @@ export interface ANPQualityAudit {
   presencaImpurezas: boolean;
   conforme: boolean; // calculations/checks based on fuel specifications
   responsavelTecnico: string;
-  // Vínculo com Nota Fiscal (NF-e) e Distribuidora
+  // Vínculo com Nota Fiscal (NF-e), Distribuidora e Marca Específica
+  marcaEspecifica?: string; // e.g. "Vibra / BR Distribuidora", "Shell / Raízen", "Ipiranga", "ALE"
   numeroNotaFiscal?: string; // e.g. "NF-e 10542"
   fornecedorNota?: string; // e.g. "Vibra Energia / Petrobras"
   chaveAcessoNfe?: string; // Chave de acesso de 44 dígitos da NF-e
   numeroLaudoFornecedor?: string; // Número do laudo fornecido pela base/refinaria
   deliveryId?: string; // ID da entrega registrada no sistema
+  // Detalhes da fórmula/tabela de cálculo de onde foram calculados
+  memoriaCalculo?: {
+    fatorCorrecaoUsado: number;
+    deltaTemperatura: number;
+    formulaAplicada: string;
+    tabelaReferenciaANP: string;
+    limitesMinMax: { min: number; max: number };
+  };
 }
 
 export interface SyncConfig {
@@ -244,6 +253,19 @@ export interface SystemCredential {
   stationCnpj: string;
 }
 
+export interface FuelDeliveryProductItem {
+  id?: string;
+  combustivel: FuelType | string;
+  volumeRecebido: number; // in liters
+  densidadeMedida?: number; // g/cm³
+  temperaturaMedida?: number; // °C
+  densidadeCorrigida?: number; // g/cm³ at 20°C
+  conforme?: boolean;
+  qualityAuditId?: string; // Vinculo direto com Laudo de Conformidade ANP específico
+  tanqueDestinoId?: string;
+  tanqueDestinoNome?: string;
+}
+
 export interface FuelDelivery {
   id: string;
   date?: string;
@@ -266,10 +288,14 @@ export interface FuelDelivery {
   densidadeCorrigida?: number;
   conforme?: boolean;
   // Vínculos com Laudo de Qualidade ANP e Distribuidora
-  qualityAuditId?: string; // ID do Laudo ANP gerado pelo posto
+  qualityAuditId?: string; // ID do Laudo ANP principal ou único
+  qualityAuditIds?: string[]; // Lista de IDs de laudos vinculados para múltiplos produtos
   numeroLaudoFornecedor?: string; // Número do Laudo/Certificado de Análise do fornecedor/refinaria
   fornecedor?: string; // Nome da distribuidora (Vibra, Ipiranga, Raízen, Shell, etc.)
+  marcaEspecifica?: string; // Marca específica da carga / produto
   chaveAcessoNfe?: string; // Chave de acesso de 44 dígitos
+  // Múltiplos produtos descarregados na mesma nota/tarefa de descarregamento
+  produtos?: FuelDeliveryProductItem[];
 }
 
 export interface LubricantProduct {

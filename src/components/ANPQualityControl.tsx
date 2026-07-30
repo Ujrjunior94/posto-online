@@ -216,8 +216,8 @@ export default function ANPQualityControl({
     onExportCSV: () => void;
   } | null>(null);
 
-  // Active view inside Quality tab: "afericao" (Calibrations), "laudo" (Chemical Quality), "entregas" (Fuel Deliveries), "especificacoes_2026" (ANP 2026 Specs Table)
-  const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas" | "especificacoes_2026" | "tabela_conferencia">("afericao");
+  // Active view inside Quality tab: "afericao", "laudo", "entregas", "especificacoes_2026", "tabela_conferencia", "relatorio_conformidade"
+  const [activeSubTab, setActiveSubTab] = useState<"afericao" | "laudo" | "entregas" | "especificacoes_2026" | "tabela_conferencia" | "relatorio_conformidade">("laudo");
   const [onlyPendingOrOverdue, setOnlyPendingOrOverdue] = useState(false);
 
   // Selection state for batch actions
@@ -232,6 +232,7 @@ export default function ANPQualityControl({
 
   // Chemical quality audit state
   const [qCombustivel, setQCombustivel] = useState<FuelType>("Gasolina Comum");
+  const [qMarcaEspecifica, setQMarcaEspecifica] = useState("Vibra Energia / BR Petrobras");
   const [qDensidade, setQDensidade] = useState(0.742); // g/cm3
   const [qTemperatura, setQTemperatura] = useState(23.0); // °C
   const [qTeorEtanol, setQTeorEtanol] = useState(27); // % (only applies to gasolines)
@@ -244,6 +245,30 @@ export default function ANPQualityControl({
   const [qFornecedorNota, setQFornecedorNota] = useState("");
   const [qDeliveryId, setQDeliveryId] = useState("");
   const [qNumeroLaudoFornecedor, setQNumeroLaudoFornecedor] = useState("");
+
+  // State para Filtros e Seleção Múltipla do Relatório de Análise de Conformidade
+  const [reportFilterFuels, setReportFilterFuels] = useState<string[]>([
+    "Gasolina Comum",
+    "Gasolina Aditivada",
+    "Etanol",
+    "Diesel S10",
+    "Diesel S500",
+  ]);
+  const [reportFilterBrands, setReportFilterBrands] = useState<string[]>([
+    "Vibra Energia / BR Petrobras",
+    "Ipiranga",
+    "Shell / Raízen",
+    "ALE Combustíveis",
+    "Petrobras REDUC / REPLAN",
+    "Forme / Bandeira Branca",
+  ]);
+  const [reportSelectedAuditIds, setReportSelectedAuditIds] = useState<{ [id: string]: boolean }>({});
+  const [reportStartDate, setReportStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split("T")[0];
+  });
+  const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Modal para vincular Nota Fiscal a um Laudo já existente
   const [linkingAuditModal, setLinkingAuditModal] = useState<ANPQualityAudit | null>(null);
@@ -259,15 +284,103 @@ export default function ANPQualityControl({
   const [densityCalcMeas, setDensityCalcMeas] = useState<number>(0.7420);
   const [densityCalcTemp, setDensityCalcTemp] = useState<number>(24.0);
 
-  // Deliveries state
+  // Deliveries state & Multi-product discharge support
   const [delDate, setDelDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [delNfe, setDelNfe] = useState("");
-  const [delCombustivel, setDelCombustivel] = useState<FuelType>("Gasolina Comum");
-  const [delVolume, setDelVolume] = useState(10000);
+  const [delFornecedor, setDelFornecedor] = useState("Vibra Energia / BR Petrobras");
   const [delPlaca, setDelPlaca] = useState("");
   const [delMotorista, setDelMotorista] = useState("");
-  const [delDensidade, setDelDensidade] = useState(0.7420);
-  const [delTemperatura, setDelTemperatura] = useState(23.0);
+  const [delAutoCreateAudits, setDelAutoCreateAudits] = useState(true);
+
+  // Multi-product items array for a single discharge task / delivery note
+  const [delProductsList, setDelProductsList] = useState<FuelDeliveryProductItem[]>([
+    {
+      id: "prod_1",
+      combustivel: "Gasolina Comum",
+      volumeRecebido: 10000,
+      densidadeMedida: 0.7420,
+      temperaturaMedida: 23.0,
+    },
+  ]);
+
+  // Backward compatibility aliases
+  const delCombustivel = (delProductsList[0]?.combustivel as FuelType) || "Gasolina Comum";
+  const delVolume = delProductsList.reduce((acc, p) => acc + (p.volumeRecebido || 0), 0);
+  const delDensidade = delProductsList[0]?.densidadeMedida || 0.7420;
+  const delTemperatura = delProductsList[0]?.temperaturaMedida || 23.0;
+
+  const setDelCombustivel = (fuel: FuelType) => {
+    setDelProductsList((prev) => {
+      const copy = [...prev];
+      if (copy[0]) copy[0].combustivel = fuel;
+      return copy;
+    });
+  };
+
+  const setDelVolume = (vol: number) => {
+    setDelProductsList((prev) => {
+      const copy = [...prev];
+      if (copy[0]) copy[0].volumeRecebido = vol;
+      return copy;
+    });
+  };
+
+  const setDelDensidade = (dens: number) => {
+    setDelProductsList((prev) => {
+      const copy = [...prev];
+      if (copy[0]) copy[0].densidadeMedida = dens;
+      return copy;
+    });
+  };
+
+  const setDelTemperatura = (temp: number) => {
+    setDelProductsList((prev) => {
+      const copy = [...prev];
+      if (copy[0]) copy[0].temperaturaMedida = temp;
+      return copy;
+    });
+  };
+
+  // 🔗 Fluxo Cruzado: Iniciar criação de Nota de Descarregamento a partir de um Laudo de Conformidade
+  const handleStartDeliveryFromAudit = (audit: ANPQualityAudit) => {
+    setDelDate(audit.data);
+    setDelNfe(audit.numeroNotaFiscal || "");
+    setDelFornecedor(audit.marcaEspecifica || audit.fornecedorNota || "Vibra Energia / BR Petrobras");
+    setDelProductsList([
+      {
+        id: "prod_1",
+        combustivel: audit.combustivel,
+        volumeRecebido: 10000,
+        densidadeMedida: audit.densidade,
+        temperaturaMedida: audit.temperatura,
+        densidadeCorrigida: audit.densidadeCorrigida,
+        conforme: audit.conforme,
+        qualityAuditId: audit.id,
+      },
+    ]);
+    setActiveSubTab("entregas");
+    setSuccess(`➜ Navegado para Nota de Descarregamento! Dados importados do Laudo de Conformidade de ${audit.combustivel}.`);
+    setTimeout(() => setSuccess(""), 6000);
+  };
+
+  // 🔗 Fluxo Cruzado: Iniciar emissão de Laudo de Conformidade a partir de uma Nota de Descarregamento / Produto
+  const handleStartAuditFromDelivery = (delivery: FuelDelivery, productItem?: FuelDeliveryProductItem) => {
+    const fuel = productItem ? (productItem.combustivel as FuelType) : ((delivery.combustivel as FuelType) || "Gasolina Comum");
+    const dens = productItem?.densidadeMedida || delivery.densidadeMedida || 0.7420;
+    const temp = productItem?.temperaturaMedida || delivery.temperaturaMedida || 23.0;
+
+    setQCombustivel(fuel);
+    setQDensidade(dens);
+    setQTemperatura(temp);
+    setQNumeroNotaFiscal(delivery.nfe || delivery.invoiceNumber || "");
+    setQFornecedorNota(delivery.fornecedor || delivery.marcaEspecifica || "Vibra Energia / BR Petrobras");
+    setQMarcaEspecifica(delivery.marcaEspecifica || delivery.fornecedor || "Vibra Energia / BR Petrobras");
+    setQDeliveryId(delivery.id);
+
+    setActiveSubTab("laudo");
+    setSuccess(`➜ Navegado para Análise de Conformidade! Dados importados da Nota de Descarregamento NF-e #${delivery.nfe || delivery.id}.`);
+    setTimeout(() => setSuccess(""), 6000);
+  };
 
   // Modal for Official ANP Table
   const [showANPTableModal, setShowANPTableModal] = useState(false);
@@ -440,6 +553,9 @@ export default function ANPQualityControl({
       qImpurezas
     );
 
+    const factor = getDensityCorrectionFactor(qCombustivel);
+    const dTemp = Number(qTemperatura) - 20;
+
     const newAuditId = "qa_" + Date.now();
     const newAudit: ANPQualityAudit = {
       id: newAuditId,
@@ -453,10 +569,18 @@ export default function ANPQualityControl({
       presencaImpurezas: qImpurezas,
       conforme: comp.conforme,
       responsavelTecnico: qResponsavel || "Químico Técnico",
+      marcaEspecifica: qMarcaEspecifica.trim() || qFornecedorNota.trim() || "Vibra Energia / BR Petrobras",
       numeroNotaFiscal: qNumeroNotaFiscal.trim() || undefined,
-      fornecedorNota: qFornecedorNota.trim() || undefined,
+      fornecedorNota: qFornecedorNota.trim() || qMarcaEspecifica.trim() || undefined,
       deliveryId: qDeliveryId || undefined,
       numeroLaudoFornecedor: qNumeroLaudoFornecedor.trim() || undefined,
+      memoriaCalculo: {
+        fatorCorrecaoUsado: factor,
+        deltaTemperatura: dTemp,
+        formulaAplicada: `D20 = ${Number(qDensidade).toFixed(4)} * [1 + ${factor.toFixed(5)} * (${Number(qTemperatura).toFixed(1)} - 20.0)] = ${comp.densidadeCorrigida.toFixed(4)} g/cm³`,
+        tabelaReferenciaANP: `Tabela ANP 2026 / ABNT NBR 5992 (${qCombustivel})`,
+        limitesMinMax: { min: comp.densidadeMin, max: comp.densidadeMax },
+      },
     };
 
     onUpdateQualityAudits([...qualityAudits, newAudit]);
@@ -552,30 +676,138 @@ export default function ANPQualityControl({
   const handleCreateDelivery = (e: React.FormEvent) => {
     e.preventDefault();
     if (!delNfe.trim() || !delMotorista.trim() || !delPlaca.trim()) {
-      alert("Preencha todos os campos da NF-e.");
+      alert("Preencha todos os campos obrigatórios da Nota de Descarregamento (NF-e, Placa e Motorista).");
       return;
     }
 
+    if (delProductsList.length === 0) {
+      alert("Adicione ao menos um produto descarregado nesta Nota.");
+      return;
+    }
+
+    const delId = "del_" + Date.now();
+    const createdAuditsList: ANPQualityAudit[] = [];
+    const createdAuditIds: string[] = [];
+
+    // Process each product item in this discharge task
+    const processedProducts = delProductsList.map((prod, index) => {
+      const fuel = (prod.combustivel as FuelType) || "Gasolina Comum";
+      const dens = Number(prod.densidadeMedida) || 0.7420;
+      const temp = Number(prod.temperaturaMedida) || 23.0;
+      const vol = Number(prod.volumeRecebido) || 10000;
+
+      const comp = checkFuelCompliance(fuel, dens, temp, 27, "Límpido e Isento", false);
+      const factor = getDensityCorrectionFactor(fuel);
+
+      let auditId = prod.qualityAuditId;
+
+      // Auto-generate quality audit if requested and not linked yet
+      if (delAutoCreateAudits && !auditId) {
+        auditId = `qa_${Date.now()}_${index}`;
+        const newAudit: ANPQualityAudit = {
+          id: auditId,
+          data: delDate,
+          combustivel: fuel,
+          densidade: dens,
+          temperatura: temp,
+          densidadeCorrigida: comp.densidadeCorrigida,
+          teorEtanol: comp.teorCalculadoOuEsperado,
+          aspectoVisual: "Límpido e Isento",
+          presencaImpurezas: false,
+          conforme: comp.conforme,
+          responsavelTecnico: qResponsavel || "Químico Técnico / Recebedor",
+          marcaEspecifica: delFornecedor || "Vibra Energia / BR Petrobras",
+          numeroNotaFiscal: delNfe.trim(),
+          fornecedorNota: delFornecedor || "Vibra Energia / BR Petrobras",
+          deliveryId: delId,
+          memoriaCalculo: {
+            fatorCorrecaoUsado: factor,
+            deltaTemperatura: temp - 20,
+            formulaAplicada: `D20 = ${dens.toFixed(4)} * [1 + ${factor.toFixed(5)} * (${temp.toFixed(1)} - 20.0)] = ${comp.densidadeCorrigida.toFixed(4)} g/cm³`,
+            tabelaReferenciaANP: `Tabela ANP 2026 / ABNT NBR 5992 (${fuel})`,
+            limitesMinMax: { min: comp.densidadeMin, max: comp.densidadeMax },
+          },
+        };
+        createdAuditsList.push(newAudit);
+      }
+
+      if (auditId) {
+        createdAuditIds.push(auditId);
+      }
+
+      return {
+        ...prod,
+        id: prod.id || `prod_${index}_${Date.now()}`,
+        combustivel: fuel,
+        volumeRecebido: vol,
+        densidadeMedida: dens,
+        temperaturaMedida: temp,
+        densidadeCorrigida: comp.densidadeCorrigida,
+        conforme: comp.conforme,
+        qualityAuditId: auditId,
+      };
+    });
+
+    const totalVolumeLiters = processedProducts.reduce((sum, p) => sum + p.volumeRecebido, 0);
+
     const newDel: FuelDelivery = {
-      id: "del_" + Date.now(),
+      id: delId,
       data: delDate,
-      nfe: delNfe,
-      combustivel: delCombustivel,
-      volumeRecebido: Number(delVolume),
-      placaCaminhao: delPlaca,
-      motorista: delMotorista,
+      date: delDate,
+      nfe: delNfe.trim(),
+      invoiceNumber: delNfe.trim(),
+      combustivel: processedProducts[0]?.combustivel,
+      fuelType: processedProducts[0]?.combustivel,
+      volumeRecebido: totalVolumeLiters,
+      volume: totalVolumeLiters,
+      placaCaminhao: delPlaca.trim(),
+      truckPlate: delPlaca.trim(),
+      motorista: delMotorista.trim(),
+      driverName: delMotorista.trim(),
+      fornecedor: delFornecedor.trim(),
+      marcaEspecifica: delFornecedor.trim(),
+      densidadeMedida: processedProducts[0]?.densidadeMedida,
+      temperaturaMedida: processedProducts[0]?.temperaturaMedida,
+      densidadeCorrigida: processedProducts[0]?.densidadeCorrigida,
+      conforme: processedProducts.every((p) => p.conforme),
+      qualityAuditId: createdAuditIds[0],
+      qualityAuditIds: createdAuditIds,
+      produtos: processedProducts,
       stationCnpj: cnpjPosto,
     };
 
     onUpdateDeliveries([...fuelDeliveries, newDel]);
-    onAddAuditLog("CREATE", "Estoque", `Recebeu carga de combustível NF-e ${delNfe}: ${delVolume}L de ${delCombustivel}`, "Regular");
 
-    setSuccess(`Carga de combustível registrada com sucesso! NF-e ${delNfe}.`);
-    setTimeout(() => setSuccess(""), 3000);
+    if (createdAuditsList.length > 0) {
+      onUpdateQualityAudits([...qualityAudits, ...createdAuditsList]);
+    }
+
+    const prodsSummaryStr = processedProducts.map((p) => `${p.combustivel} (${p.volumeRecebido}L)`).join(", ");
+
+    onAddAuditLog(
+      "CREATE",
+      "Estoque",
+      `Recebeu Nota de Descarregamento NF-e ${delNfe}: Total ${totalVolumeLiters}L [${prodsSummaryStr}]. Laudos vinculados: ${createdAuditIds.length}`,
+      "Regular"
+    );
+
+    setSuccess(
+      `Nota de Descarregamento NF-e ${delNfe} registrada com sucesso! ${processedProducts.length} produto(s) [${totalVolumeLiters}L] e ${createdAuditsList.length} Laudo(s) de Conformidade gerado(s) e vinculado(s).`
+    );
+    setTimeout(() => setSuccess(""), 5000);
 
     setDelNfe("");
     setDelMotorista("");
     setDelPlaca("");
+    setDelProductsList([
+      {
+        id: "prod_1",
+        combustivel: "Gasolina Comum",
+        volumeRecebido: 10000,
+        densidadeMedida: 0.7420,
+        temperaturaMedida: 23.0,
+      },
+    ]);
   };
 
   const handleDeleteDelivery = (id: string) => {
@@ -1614,15 +1846,21 @@ export default function ANPQualityControl({
           },
           {
             id: "laudo",
-            label: "Laudo Químico",
+            label: "1° Análise de Conformidade",
             icon: <Thermometer className="h-4 w-4" />,
             badge: qualityAudits.length,
           },
           {
             id: "entregas",
-            label: "Entregas NF-e",
+            label: "2° Nota de Descarregamento",
             icon: <Truck className="h-4 w-4" />,
             badge: fuelDeliveries.length,
+          },
+          {
+            id: "relatorio_conformidade",
+            label: "3° Relatório de Conformidade",
+            icon: <FileText className="h-4 w-4" />,
+            badge: "ANP",
           },
           {
             id: "especificacoes_2026",
@@ -1655,6 +1893,56 @@ export default function ANPQualityControl({
           ) : null
         }
       />
+
+      {/* 🚀 Atalho Rápido de Fluxo Seqüencial ANP */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3.5 rounded-2xl border border-indigo-800/60 shadow-sm flex flex-col md:flex-row items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="px-2.5 py-1 bg-amber-400 text-slate-950 font-black text-[10px] rounded-lg uppercase tracking-wider shrink-0">
+            FLUXO INTEGRADO ANP
+          </span>
+          <p className="text-xs text-slate-200 font-medium leading-tight">
+            <strong>1° Análise de Conformidade</strong> (Gera Laudo) ➔ <strong>2° Nota de Descarregamento</strong> (Gera Carga Múltipla) ➔ <strong>Vínculo Automático Mútuo</strong>.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("laudo")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "laudo"
+                ? "bg-emerald-500 text-slate-950 shadow-md font-black ring-2 ring-emerald-300"
+                : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+            }`}
+          >
+            <Thermometer className="h-3.5 w-3.5" />
+            <span>1° Laudo de Conformidade</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("entregas")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "entregas"
+                ? "bg-indigo-500 text-white shadow-md font-black ring-2 ring-indigo-300"
+                : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+            }`}
+          >
+            <Truck className="h-3.5 w-3.5" />
+            <span>2° Nota de Descarregamento</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("relatorio_conformidade")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === "relatorio_conformidade"
+                ? "bg-amber-400 text-slate-950 shadow-md font-black ring-2 ring-amber-200"
+                : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+            }`}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            <span>3° Relatório Unificado</span>
+          </button>
+        </div>
+      </div>
 
       {success && (
         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-xs">
@@ -2564,6 +2852,52 @@ export default function ANPQualityControl({
                   </div>
                 )}
 
+                {/* Marca Específica do Produto */}
+                <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                  <label className="block text-[10px] font-bold text-slate-800 uppercase flex items-center justify-between">
+                    <span>🏷️ Marca Específica / Bandeira *</span>
+                    <span className="text-[9px] font-bold text-indigo-600">Obrigatório ANP</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Preset de Marca</label>
+                      <select
+                        value={qMarcaEspecifica}
+                        onChange={(e) => {
+                          setQMarcaEspecifica(e.target.value);
+                          if (!qFornecedorNota) setQFornecedorNota(e.target.value);
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                      >
+                        <option value="Vibra Energia / BR Petrobras">Vibra Energia / BR Petrobras</option>
+                        <option value="Ipiranga">Ipiranga</option>
+                        <option value="Shell / Raízen">Shell / Raízen</option>
+                        <option value="ALE Combustíveis">ALE Combustíveis</option>
+                        <option value="Petrobras REDUC / REPLAN">Petrobras REDUC / REPLAN</option>
+                        <option value="Forme / Bandeira Branca">Forme / Bandeira Branca</option>
+                        <option value="Lubrax (Vibra)">Lubrax (Vibra)</option>
+                        <option value="Mobil">Mobil</option>
+                        <option value="Castrol">Castrol</option>
+                        <option value="Texaco / Havoline">Texaco / Havoline</option>
+                        <option value="Petronas / Selenia">Petronas / Selenia</option>
+                        <option value="Motul">Motul</option>
+                        <option value="Outra Marca Específica">Outra Marca Específica</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Marca / Detalhe Específico</label>
+                      <input
+                        type="text"
+                        required
+                        value={qMarcaEspecifica}
+                        onChange={(e) => setQMarcaEspecifica(e.target.value)}
+                        placeholder="Ex: Vibra / BR Petrobras"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <div>
                     <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">N° Nota Fiscal (NF-e)</label>
@@ -2572,7 +2906,7 @@ export default function ANPQualityControl({
                       value={qNumeroNotaFiscal}
                       onChange={(e) => setQNumeroNotaFiscal(e.target.value)}
                       placeholder="Ex: NF-e 10542"
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
                     />
                   </div>
                   <div>
@@ -2582,7 +2916,7 @@ export default function ANPQualityControl({
                       value={qFornecedorNota}
                       onChange={(e) => setQFornecedorNota(e.target.value)}
                       placeholder="Ex: Vibra / Petrobras"
-                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900"
                     />
                   </div>
                 </div>
@@ -2809,7 +3143,16 @@ export default function ANPQualityControl({
                             </td>
                             <td className="py-2.5 px-3 text-slate-500">{audit.responsavelTecnico}</td>
                             <td className="py-2.5 px-3 text-right">
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartDeliveryFromAudit(audit)}
+                                  className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] rounded-lg transition border border-indigo-200 flex items-center gap-1 cursor-pointer shrink-0"
+                                  title="Navegar para Nota de Descarregamento e vincular este laudo"
+                                >
+                                  <Truck className="h-3 w-3 text-indigo-600" />
+                                  <span>+ Gerar Nota</span>
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => handleOpenLinkModal(audit)}
@@ -2863,6 +3206,422 @@ export default function ANPQualityControl({
         </div>
       )}
 
+      {/* SUB-ABA: RELATÓRIO DE ANÁLISE DE CONFORMIDADE ANP (SELEÇÃO MÚLTIPLA DE COMBUSTÍVEIS, MARCAS E LAUDOS) */}
+      {activeSubTab === "relatorio_conformidade" && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 rounded-2xl shadow-md border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-[10px] font-black uppercase tracking-wider">
+                  Módulo de Emissão Regulamentar ANP
+                </span>
+                <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 rounded-full text-[10px] font-bold">
+                  ABNT NBR 5992
+                </span>
+              </div>
+              <h3 className="text-base font-black tracking-tight text-white flex items-center gap-2">
+                <FileText className="h-5 w-5 text-emerald-400" />
+                Relatórios de Análise de Conformidade de Combustíveis e Lubrificantes
+              </h3>
+              <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                Gere laudos técnicos consolidados e certificados de qualidade. Selecione múltiplos combustíveis, marcas específicas e laudos individuais. Todas as fontes numéricas e descritivas são formatadas em alto contraste com memória de cálculo detalhada.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleExportSelectedQualityAuditsPDF}
+                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition shadow-md flex items-center gap-2 cursor-pointer"
+              >
+                <FileDown className="h-4 w-4" />
+                <span>Exportar Relatório PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportSelectedQualityAuditsCSV}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs transition border border-slate-700 flex items-center gap-2 cursor-pointer"
+              >
+                <Download className="h-4 w-4 text-emerald-400" />
+                <span>Exportar Planilha (CSV)</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Painel de Filtros e Seleção Múltipla */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                <Filter className="h-4 w-4 text-indigo-600" />
+                Filtros e Seleção Múltipla de Dados ("Selecionar mais de um")
+              </h4>
+              <span className="text-[11px] font-bold text-slate-500">
+                {qualityAudits.length} Laudos Químicos Cadastrados
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* 1. Múltiplos Combustíveis */}
+              <div className="lg:col-span-5 space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Droplet className="h-3.5 w-3.5 text-indigo-600" />
+                    Combustíveis (Múltipla Seleção):
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setReportFilterFuels(["Gasolina Comum", "Gasolina Aditivada", "Gasolina Premium", "Etanol", "Diesel S10", "Diesel S500"])}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
+                      Todos
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setReportFilterFuels([])}
+                      className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {["Gasolina Comum", "Gasolina Aditivada", "Gasolina Premium", "Etanol", "Diesel S10", "Diesel S500"].map((fuel) => {
+                    const isSelected = reportFilterFuels.includes(fuel);
+                    return (
+                      <button
+                        key={fuel}
+                        type="button"
+                        onClick={() => {
+                          setReportFilterFuels(prev =>
+                            prev.includes(fuel) ? prev.filter(f => f !== fuel) : [...prev, fuel]
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 border cursor-pointer ${
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className={`h-2 w-2 rounded-full ${isSelected ? "bg-emerald-300" : "bg-slate-300"}`} />
+                        <span>{fuel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 2. Múltiplas Marcas Específicas */}
+              <div className="lg:col-span-4 space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                    Marcas Específicas / Bandeiras:
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setReportFilterBrands([
+                        "Vibra Energia / BR Petrobras", "Ipiranga", "Shell / Raízen", "ALE Combustíveis", "Petrobras REDUC / REPLAN", "Forme / Bandeira Branca"
+                      ])}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
+                      Todas
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setReportFilterBrands([])}
+                      className="text-[10px] font-bold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "Vibra Energia / BR Petrobras",
+                    "Ipiranga",
+                    "Shell / Raízen",
+                    "ALE Combustíveis",
+                    "Petrobras REDUC / REPLAN",
+                    "Forme / Bandeira Branca"
+                  ].map((brand) => {
+                    const isSelected = reportFilterBrands.includes(brand);
+                    return (
+                      <button
+                        key={brand}
+                        type="button"
+                        onClick={() => {
+                          setReportFilterBrands(prev =>
+                            prev.includes(brand) ? prev.filter(b => b !== brand) : [...prev, brand]
+                          );
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 border cursor-pointer ${
+                          isSelected
+                            ? "bg-slate-900 text-white border-slate-950 shadow-xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>{brand.split(" ")[0]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 3. Período de Análise */}
+              <div className="lg:col-span-3 space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+                <label className="text-[11px] font-black text-slate-700 uppercase tracking-wider block">
+                  📅 Período de Aferição:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">De</span>
+                    <input
+                      type="date"
+                      value={reportStartDate}
+                      onChange={(e) => setReportStartDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">Até</span>
+                    <input
+                      type="date"
+                      value={reportEndDate}
+                      onChange={(e) => setReportEndDate(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards de Métricas do Relatório Filtrado */}
+          {(() => {
+            const filteredAuditsList = qualityAudits.filter((aud) => {
+              const audDate = aud.data ? aud.data.substring(0, 10) : "";
+              const inDate = (!reportStartDate || audDate >= reportStartDate) && (!reportEndDate || audDate <= reportEndDate);
+              const inFuel = reportFilterFuels.length === 0 || reportFilterFuels.includes(aud.combustivel);
+              const marca = aud.marcaEspecifica || aud.fornecedorNota || "Vibra Energia / BR Petrobras";
+              const inBrand = reportFilterBrands.length === 0 || reportFilterBrands.some((b) => marca.toLowerCase().includes(b.toLowerCase().split(" ")[0]));
+              return inDate && inFuel && inBrand;
+            });
+
+            const totalFiltered = filteredAuditsList.length;
+            const totalConformes = filteredAuditsList.filter((a) => a.conforme).length;
+            const totalReprovados = totalFiltered - totalConformes;
+            const rate = totalFiltered > 0 ? Math.round((totalConformes / totalFiltered) * 100) : 100;
+
+            const avgDens20 = totalFiltered > 0
+              ? (filteredAuditsList.reduce((acc, a) => acc + (a.densidadeCorrigida || a.densidade), 0) / totalFiltered).toFixed(4)
+              : "0.7420";
+
+            const avgTemp = totalFiltered > 0
+              ? (filteredAuditsList.reduce((acc, a) => acc + a.temperatura, 0) / totalFiltered).toFixed(1)
+              : "20.0";
+
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Amostras Analisadas</span>
+                  <span className="text-xl font-black text-slate-900">{totalFiltered}</span>
+                </div>
+
+                <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 text-center">
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase font-mono block">Índice Conformidade</span>
+                  <span className="text-xl font-black text-emerald-800">{rate}%</span>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Densidade Média D20</span>
+                  <span className="text-xl font-black text-slate-900">{avgDens20} <span className="text-xs font-normal text-slate-500">g/cm³</span></span>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs text-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Temp. Média Aferição</span>
+                  <span className="text-xl font-black text-slate-900">{avgTemp} <span className="text-xs font-normal text-slate-500">°C</span></span>
+                </div>
+
+                <div className="bg-rose-50 p-3.5 rounded-2xl border border-rose-200 text-center col-span-2 md:col-span-1">
+                  <span className="text-[10px] font-bold text-rose-700 uppercase font-mono block">Amostras Reprovadas</span>
+                  <span className="text-xl font-black text-rose-800">{totalReprovados}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Tabela Principal dos Laudos com Memória de Cálculo e Seleção Múltipla */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden space-y-3">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  Laudos Químicos e Detalhes Regulamentares ANP
+                </h4>
+                <p className="text-[11px] font-semibold text-slate-600 mt-0.5">
+                  Fontes em preto de alto contraste com marca, temperatura, densidade e memória de cálculo explícitas.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allSelected: { [key: string]: boolean } = {};
+                    qualityAudits.forEach((a) => { allSelected[a.id] = true; });
+                    setSelectedQualityAudits(allSelected);
+                  }}
+                  className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Selecionar Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedQualityAudits({})}
+                  className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Limpar Seleção
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider border-b border-slate-800">
+                    <th className="p-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={qualityAudits.length > 0 && Object.keys(selectedQualityAudits).length === qualityAudits.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            const allSel: { [key: string]: boolean } = {};
+                            qualityAudits.forEach((a) => { allSel[a.id] = true; });
+                            setSelectedQualityAudits(allSel);
+                          } else {
+                            setSelectedQualityAudits({});
+                          }
+                        }}
+                        className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </th>
+                    <th className="p-3">Data</th>
+                    <th className="p-3">Combustível</th>
+                    <th className="p-3">Marca Específica</th>
+                    <th className="p-3 text-center">Temp. ($T_{obs}$)</th>
+                    <th className="p-3 text-right">Dens. Lida ($D_{obs}$)</th>
+                    <th className="p-3 text-right">Dens. Corrigida ($D_{20}$)</th>
+                    <th className="p-3">Memória de Cálculo ("Da qual foram calculadas")</th>
+                    <th className="p-3 text-center">Veredicto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-xs text-slate-900 font-medium">
+                  {(() => {
+                    const filteredList = qualityAudits.filter((aud) => {
+                      const audDate = aud.data ? aud.data.substring(0, 10) : "";
+                      const inDate = (!reportStartDate || audDate >= reportStartDate) && (!reportEndDate || audDate <= reportEndDate);
+                      const inFuel = reportFilterFuels.length === 0 || reportFilterFuels.includes(aud.combustivel);
+                      const marca = aud.marcaEspecifica || aud.fornecedorNota || "Vibra Energia / BR Petrobras";
+                      const inBrand = reportFilterBrands.length === 0 || reportFilterBrands.some((b) => marca.toLowerCase().includes(b.toLowerCase().split(" ")[0]));
+                      return inDate && inFuel && inBrand;
+                    });
+
+                    if (filteredList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={9} className="p-8 text-center text-slate-500 font-semibold bg-slate-50/50">
+                            Nenhum laudo de conformidade encontrado para os filtros selecionados.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return filteredList.map((audit) => {
+                      const isChecked = !!selectedQualityAudits[audit.id];
+                      const marca = audit.marcaEspecifica || audit.fornecedorNota || "Vibra Energia / BR Petrobras";
+                      const temp = audit.temperatura;
+                      const dobs = audit.densidade;
+                      const d20 = audit.densidadeCorrigida || audit.densidade;
+                      const factor = getDensityCorrectionFactor(audit.combustivel);
+                      const formulaStr = audit.memoriaCalculo?.formulaAplicada || `D20 = ${dobs.toFixed(4)} * [1 + ${factor} * (${temp.toFixed(1)} - 20.0)] = ${d20.toFixed(4)} g/cm³`;
+
+                      return (
+                        <tr
+                          key={audit.id}
+                          className={`hover:bg-indigo-50/40 transition ${
+                            isChecked ? "bg-indigo-50/60" : "even:bg-slate-50/50"
+                          }`}
+                        >
+                          <td className="p-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                setSelectedQualityAudits(prev => ({
+                                  ...prev,
+                                  [audit.id]: e.target.checked
+                                }));
+                              }}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                            {formatDateBR(audit.data)}
+                          </td>
+                          <td className="p-3 font-extrabold text-slate-900">
+                            {audit.combustivel}
+                          </td>
+                          <td className="p-3 font-bold text-slate-900">
+                            <span className="px-2 py-0.5 bg-slate-100 border border-slate-300 rounded-md text-[11px] font-black text-slate-900 inline-block">
+                              🏷️ {marca}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-900">
+                            {temp.toFixed(1)} °C
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-900">
+                            {dobs.toFixed(4)} g/cm³
+                          </td>
+                          <td className="p-3 text-right font-mono font-black text-indigo-950 bg-indigo-50/50 rounded-md">
+                            {d20.toFixed(4)} g/cm³
+                          </td>
+                          <td className="p-3 text-[11px] text-slate-900 font-mono">
+                            <div className="bg-slate-100 p-1.5 rounded-lg border border-slate-200">
+                              <span className="font-bold text-indigo-900 block">{formulaStr}</span>
+                              <span className="text-[10px] text-slate-700 block mt-0.5">
+                                Ref: Tabela ANP 2026 / ABNT NBR 5992 (Fator $\alpha$: {factor})
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                                audit.conforme
+                                  ? "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                                  : "bg-rose-100 text-rose-900 border border-rose-300"
+                              }`}
+                            >
+                              {audit.conforme ? "CONFORME" : "REPROVADO"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeSubTab === "entregas" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Carga Form Left */}
@@ -2902,138 +3661,212 @@ export default function ANPQualityControl({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Combustível</label>
-                  <select
-                    value={delCombustivel}
-                    onChange={(e) => setDelCombustivel(e.target.value as FuelType)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer font-semibold"
-                  >
-                    {FUEL_TYPES.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Volume (L) *</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Distribuidora / Marca *</label>
                   <input
-                    type="number"
+                    type="text"
                     required
-                    value={delVolume}
-                    onChange={(e) => setDelVolume(Number(e.target.value))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none font-bold"
+                    value={delFornecedor}
+                    onChange={(e) => setDelFornecedor(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    placeholder="Ex: Vibra Energia / BR"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Placa Caminhão</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Placa Caminhão *</label>
                   <input
                     type="text"
                     required
                     value={delPlaca}
                     onChange={(e) => setDelPlaca(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                     placeholder="Ex: ABC-1234"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Motorista</label>
-                  <input
-                    type="text"
-                    required
-                    value={delMotorista}
-                    onChange={(e) => setDelMotorista(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                    placeholder="Ex: Roberto Silveira"
                   />
                 </div>
               </div>
 
-              {/* Delivery Densidade Test & Visual Validation */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Motorista Responsável *</label>
+                <input
+                  type="text"
+                  required
+                  value={delMotorista}
+                  onChange={(e) => setDelMotorista(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  placeholder="Ex: Roberto Silveira"
+                />
+              </div>
+
+              {/* Multi-product Discharge Items Section */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-extrabold uppercase text-indigo-700 flex items-center gap-1">
-                    <Thermometer className="h-3.5 w-3.5" /> Teste de Densidade na Descarga
-                  </span>
+                  <label className="block text-[10px] font-black text-indigo-900 uppercase flex items-center gap-1.5">
+                    <Fuel className="h-3.5 w-3.5 text-indigo-600" />
+                    Produtos Descarregados ({delProductsList.length})
+                  </label>
                   <button
                     type="button"
-                    onClick={() => setShowANPTableModal(true)}
-                    className="text-[10px] font-bold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer"
+                    onClick={() => {
+                      setDelProductsList((prev) => [
+                        ...prev,
+                        {
+                          id: `prod_${Date.now()}`,
+                          combustivel: prev.length === 1 ? "Diesel S10" : "Etanol",
+                          volumeRecebido: 5000,
+                          densidadeMedida: prev.length === 1 ? 0.8350 : 0.8090,
+                          temperaturaMedida: 23.0,
+                        },
+                      ]);
+                    }}
+                    className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-[10px] rounded-lg transition flex items-center gap-1 cursor-pointer"
                   >
-                    <Table className="h-3 w-3" /> Tabela ANP
+                    <Plus className="h-3 w-3" />
+                    <span>+ Outro Produto</span>
                   </button>
                 </div>
 
-                {(() => {
-                  const delComp = checkFuelCompliance(
-                    delCombustivel,
-                    delDensidade,
-                    delTemperatura,
+                {delProductsList.map((prodItem, idx) => {
+                  const comp = checkFuelCompliance(
+                    prodItem.combustivel as FuelType,
+                    prodItem.densidadeMedida || 0.7420,
+                    prodItem.temperaturaMedida || 23.0,
                     27,
                     "Límpido e Isento",
                     false
                   );
 
                   return (
-                    <div className="space-y-2">
+                    <div key={prodItem.id || idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <div className="flex justify-between items-center border-b border-slate-200/80 pb-1.5">
+                        <span className="text-[10px] font-black uppercase text-indigo-800 flex items-center gap-1">
+                          Item #{idx + 1}: {prodItem.combustivel}
+                        </span>
+                        {delProductsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDelProductsList((prev) => prev.filter((_, i) => i !== idx));
+                            }}
+                            className="text-rose-600 hover:text-rose-800 text-[10px] font-bold cursor-pointer"
+                          >
+                            Excluir Item
+                          </button>
+                        )}
+                      </div>
+
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
-                            Densidade Amostra (g/cm³)
-                          </label>
-                          <input
-                            type="number"
-                            step="0.0001"
-                            value={delDensidade}
-                            onChange={(e) => setDelDensidade(Number(e.target.value))}
-                            className={`w-full rounded-lg px-2.5 py-1.5 text-xs font-mono font-black ${
-                              !delComp.densidadeOk
-                                ? "bg-rose-50 border-2 border-rose-500 text-rose-900 ring-2 ring-rose-200 animate-pulse"
-                                : "bg-emerald-50/50 border border-emerald-500 text-emerald-950"
-                            }`}
-                          />
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Combustível</label>
+                          <select
+                            value={prodItem.combustivel}
+                            onChange={(e) => {
+                              const newFuel = e.target.value as FuelType;
+                              setDelProductsList((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = {
+                                  ...copy[idx],
+                                  combustivel: newFuel,
+                                  densidadeMedida: newFuel === "Etanol" ? 0.8090 : newFuel.includes("Diesel") ? 0.8350 : 0.7420,
+                                };
+                                return copy;
+                              });
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-800 cursor-pointer"
+                          >
+                            {FUEL_TYPES.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </select>
                         </div>
+
                         <div>
-                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-1">
-                            Temperatura (°C)
-                          </label>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Volume (Litros)</label>
                           <input
                             type="number"
-                            step="0.1"
-                            value={delTemperatura}
-                            onChange={(e) => setDelTemperatura(Number(e.target.value))}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold"
+                            required
+                            value={prodItem.volumeRecebido}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setDelProductsList((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = { ...copy[idx], volumeRecebido: val };
+                                return copy;
+                              });
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-slate-900"
                           />
                         </div>
                       </div>
 
-                      {!delComp.densidadeOk ? (
-                        <div className="p-2 bg-rose-100 border border-rose-300 rounded-lg text-[10px] font-bold text-rose-900 flex items-center gap-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
-                          <span>
-                            D20 Carga: {(delComp.densidadeCorrigida * 1000).toFixed(1)} kg/m³ — <strong>FORA DA MARGEM ANP!</strong> (Permitido: {(delComp.densidadeMin * 1000).toFixed(1)} - {(delComp.densidadeMax * 1000).toFixed(1)} kg/m³)
-                          </span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Densidade ($D_{obs}$)</label>
+                          <input
+                            type="number"
+                            step="0.0001"
+                            value={prodItem.densidadeMedida}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setDelProductsList((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = { ...copy[idx], densidadeMedida: val };
+                                return copy;
+                              });
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold"
+                          />
                         </div>
-                      ) : (
-                        <div className="p-1.5 bg-emerald-100/70 border border-emerald-300 rounded-lg text-[10px] font-bold text-emerald-900 flex items-center gap-1.5">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>D20 Carga: {(delComp.densidadeCorrigida * 1000).toFixed(1)} kg/m³ — Carga Aprovada ANP 2026</span>
+
+                        <div>
+                          <label className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">Temp. Medida (°C)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={prodItem.temperaturaMedida}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setDelProductsList((prev) => {
+                                const copy = [...prev];
+                                copy[idx] = { ...copy[idx], temperaturaMedida: val };
+                                return copy;
+                              });
+                            }}
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono font-bold"
+                          />
                         </div>
-                      )}
+                      </div>
+
+                      <div className={`p-1.5 rounded-lg text-[10px] font-bold flex items-center justify-between ${
+                        comp.conforme ? "bg-emerald-100/70 text-emerald-900 border border-emerald-300" : "bg-rose-100 text-rose-900 border border-rose-300"
+                      }`}>
+                        <span>D20 Corrigida: {comp.densidadeCorrigida.toFixed(4)} g/cm³</span>
+                        <span>{comp.conforme ? "✓ CONFORME ANP" : "⚠️ FORA DE PADRÃO"}</span>
+                      </div>
                     </div>
                   );
-                })()}
+                })}
               </div>
+
+              <label className="flex items-start space-x-2 bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100 cursor-pointer text-[10.5px]">
+                <input
+                  type="checkbox"
+                  checked={delAutoCreateAudits}
+                  onChange={(e) => setDelAutoCreateAudits(e.target.checked)}
+                  className="rounded border-indigo-300 text-indigo-600 mt-0.5 cursor-pointer"
+                />
+                <span className="text-indigo-950 font-semibold leading-normal">
+                  ⚡ Emitir e vincular automaticamente 1 Laudo de Conformidade ANP para cada produto desta carga.
+                </span>
+              </label>
 
               <button
                 type="submit"
                 disabled={isReadOnly}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
               >
-                Dar Entrada na Carga NF-e
+                <Truck className="h-4 w-4" />
+                <span>Registrar Nota de Descarregamento</span>
               </button>
             </form>
           </div>
@@ -3041,7 +3874,10 @@ export default function ANPQualityControl({
           {/* List Deliveries Right */}
           <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-              <h3 className="text-sm font-semibold text-slate-800">Cargas e Recebimentos de Combustíveis</h3>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Notas e Descarregamentos de Combustíveis</h3>
+                <p className="text-[11px] text-slate-500">Cada tarefa de descarregamento pode obter múltiplos produtos vinculados.</p>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => {
@@ -3077,59 +3913,104 @@ export default function ANPQualityControl({
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
+              <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="text-[10px] text-slate-400 uppercase font-bold border-b border-slate-100 bg-slate-50/50">
-                    <th className="py-2.5 px-3">Data</th>
-                    <th className="py-2.5 px-3">NF-e</th>
-                    <th className="py-2.5 px-3">Combustível</th>
-                    <th className="py-2.5 px-3">Volume Recebido</th>
-                    <th className="py-2.5 px-3">Motorista / Placa</th>
-                    <th className="py-2.5 px-3 text-right">Ações</th>
+                    <th className="py-2.5 px-3">Data / NF-e</th>
+                    <th className="py-2.5 px-3">Produtos Descarregados</th>
+                    <th className="py-2.5 px-3">Volume Total</th>
+                    <th className="py-2.5 px-3">Distribuidora / Motorista</th>
+                    <th className="py-2.5 px-3 text-right">Ações & Vínculos</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredDeliveries.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">Nenhum recebimento de carga registrado.</td>
+                      <td colSpan={5} className="py-8 text-center text-slate-500 italic">Nenhum recebimento de carga registrado.</td>
                     </tr>
                   ) : (
                     filteredDeliveries
                       .slice()
                       .reverse()
-                      .map((d) => (
-                        <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50/40">
-                          <td className="py-2.5 px-3 font-semibold text-slate-600">{d.data.split("-").reverse().join("/")}</td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-indigo-600">#{d.nfe}</td>
-                          <td className="py-2.5 px-3 font-bold text-slate-800">{d.combustivel}</td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                            {d.volumeRecebido.toLocaleString("pt-BR")} L
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500">
-                            {d.motorista} ({d.placaCaminhao})
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditDeliveryModal(d)}
-                                className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
-                                title="Editar e Recalcular Carga Salva"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteDelivery(d.id)}
-                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                title="Remover Carga"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                      .map((d) => {
+                        const prods = d.produtos && d.produtos.length > 0 ? d.produtos : [
+                          {
+                            combustivel: d.combustivel || "Gasolina Comum",
+                            volumeRecebido: d.volumeRecebido || d.volume || 10000,
+                            densidadeMedida: d.densidadeMedida,
+                            temperaturaMedida: d.temperaturaMedida,
+                            qualityAuditId: d.qualityAuditId,
+                          }
+                        ];
+
+                        return (
+                          <tr key={d.id} className="border-b border-slate-100 hover:bg-slate-50/40">
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-indigo-700 font-mono">#{d.nfe || d.invoiceNumber}</div>
+                              <div className="text-[10px] font-semibold text-slate-500">{d.data ? d.data.split("-").reverse().join("/") : d.date}</div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="space-y-1">
+                                {prods.map((p, pi) => (
+                                  <div key={pi} className="flex items-center gap-1.5 flex-wrap text-[11px]">
+                                    <span className="font-bold text-slate-800">{p.combustivel}:</span>
+                                    <span className="font-mono font-semibold text-slate-600">{p.volumeRecebido.toLocaleString("pt-BR")} L</span>
+                                    {p.qualityAuditId ? (
+                                      <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-1.5 py-0.2 rounded font-bold">
+                                        ✓ Laudo Vinculado
+                                      </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartAuditFromDelivery(d, p)}
+                                        className="text-[9px] bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded font-bold cursor-pointer transition"
+                                      >
+                                        + Gerar Laudo
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-black text-slate-900 text-sm">
+                              {(d.volumeRecebido || d.volume || 0).toLocaleString("pt-BR")} L
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600">
+                              <div className="font-bold text-slate-800">{d.fornecedor || d.marcaEspecifica || "Vibra / BR"}</div>
+                              <div className="text-[10px] text-slate-500">{d.motorista} ({d.placaCaminhao})</div>
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartAuditFromDelivery(d)}
+                                  className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg transition border border-emerald-200 flex items-center gap-1 cursor-pointer shrink-0"
+                                  title="Ir para Análise de Conformidade e emitir Laudo para esta carga"
+                                >
+                                  <Thermometer className="h-3 w-3 text-emerald-600" />
+                                  <span>+ Laudo ANP</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditDeliveryModal(d)}
+                                  className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+                                  title="Editar e Recalcular Carga Salva"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDelivery(d.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Remover Carga"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
